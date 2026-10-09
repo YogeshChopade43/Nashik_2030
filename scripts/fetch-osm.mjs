@@ -36,6 +36,12 @@ const QUERIES = {
   nwr[office=government];
   node[highway=bus_stop];
   nwr[railway~"^(station|halt)$"];
+  nwr[amenity~"^(toilets|drinking_water|fuel|cinema)$"];
+  nwr[amenity~"^(bank|pharmacy)$"][name];
+  node[highway~"^(traffic_signals|mini_roundabout)$"][name];
+  nwr[junction][name];
+  nwr[place=square][name];
+  nwr[man_made=water_tower][name];
 );
 out center meta;`,
   roads: `[out:json][timeout:180][bbox:${B}];
@@ -85,6 +91,10 @@ async function overpass(name, query) {
 
 // ---------- classification ----------
 function placeType(t) {
+  if (t.amenity === 'toilets') return 'toilets';
+  if (t.amenity === 'drinking_water') return 'drinking_water';
+  if (['fuel', 'bank', 'pharmacy', 'cinema'].includes(t.amenity) || ['traffic_signals', 'mini_roundabout'].includes(t.highway)
+    || t.junction || t.place === 'square' || t.man_made === 'water_tower') return 'landmark';
   if (t.amenity === 'hospital' || t.healthcare === 'hospital') return 'hospital';
   if (t.amenity === 'school') return 'school';
   if (t.amenity === 'college' || t.amenity === 'university') return 'college';
@@ -108,12 +118,19 @@ function categoryOf(type, t) {
     case 'religious': return t.religion ?? null;
     case 'tourism': return t.tourism ?? (t.historic ? `historic ${t.historic}` : null);
     case 'government': return t.amenity ?? (t.government ? `government ${t.government}` : 'government office');
+    case 'landmark':
+      if (t.amenity === 'fuel') return 'petrol pump';
+      if (t.amenity) return t.amenity;
+      if (t.man_made === 'water_tower') return 'water tank';
+      return 'chowk / junction';
+    case 'toilets': return t.fee === 'no' ? 'public toilet · free' : 'public toilet';
+    case 'drinking_water': return 'drinking water';
     default: return null;
   }
 }
 
 const PREFIX = { node: 'n', way: 'w', relation: 'r' };
-const KEEP_TAGS = ['name:en', 'name:mr', 'alt_name', 'short_name', 'old_name', 'official_name', 'operator', 'operator:type', 'addr:full', 'addr:street', 'addr:city', 'addr:postcode', 'phone', 'website', 'opening_hours', 'wikipedia', 'wikidata', 'ref', 'lanes', 'maxspeed', 'surface', 'oneway', 'bridge', 'religion', 'denomination', 'beds', 'emergency', 'isced:level', 'population', 'heritage'];
+const KEEP_TAGS = ['name:en', 'name:mr', 'alt_name', 'short_name', 'old_name', 'official_name', 'operator', 'operator:type', 'addr:full', 'addr:street', 'addr:city', 'addr:postcode', 'phone', 'website', 'opening_hours', 'wikipedia', 'wikidata', 'ref', 'lanes', 'maxspeed', 'surface', 'oneway', 'bridge', 'religion', 'denomination', 'beds', 'emergency', 'isced:level', 'population', 'heritage', 'brand', 'fee', 'female', 'male', 'unisex', 'wheelchair', 'access'];
 
 const round = (n) => Math.round(n * 1e5) / 1e5;
 function roundCoords(c) { return typeof c[0] === 'number' ? [round(c[0]), round(c[1])] : c.map(roundCoords); }
@@ -177,13 +194,20 @@ const toGeojson = (raw) => osmtogeojson(raw, { flatProperties: false }).features
 const processors = {
   places(raw) {
     const out = [];
-    for (const el of raw.elements) {
-      const t = el.tags ?? {};
+    for (let el of raw.elements) {
+      let t = el.tags ?? {};
       const type = placeType(t);
       const lon = el.lon ?? el.center?.lon, lat = el.lat ?? el.center?.lat;
       if (!type || lon == null) continue;
-      // Unnamed bus stops are still real infrastructure; other unnamed POIs are noise.
-      if (!t.name && !t['name:en'] && type !== 'bus_stop') continue;
+      // Petrol pumps named just "Fuel" are named by brand ("Indian Oil petrol pump"), or skipped — never invented.
+      if (type === 'landmark' && t.amenity === 'fuel' && (!t.name || /^fuel$/i.test(t.name.trim()))) {
+        const brand = t.brand?.trim();
+        if (!brand || /^(fuel|petrol pump|petrol|gas station)$/i.test(brand)) continue; // generic brand = no real name
+        t = { ...t, name: /petrol|pump|fuel/i.test(brand) ? brand : `${brand} petrol pump` };
+        el = { ...el, tags: t };
+      }
+      // Unnamed bus stops, toilets and water points are still real infrastructure; other unnamed POIs are noise.
+      if (!t.name && !t['name:en'] && !['bus_stop', 'toilets', 'drinking_water'].includes(type)) continue;
       const f = entity('place', type, el, { type: 'Point', coordinates: [lon, lat] });
       f.properties.category = categoryOf(type, t);
       out.push(f);
@@ -233,7 +257,7 @@ const processors = {
 };
 
 const DESCRIPTIONS = {
-  places: 'Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations',
+  places: 'Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations, public toilets, drinking water, and local landmarks (named chowks/nakas/circles/signals, petrol pumps, banks, pharmacies, cinemas, water tanks)',
   roads: 'Named road segments (OSM ways), motorway through living_street',
   parks: 'Parks and gardens (leisure=park|garden) as polygons',
   water: 'Named rivers, streams, canals, lakes and reservoirs',
@@ -242,6 +266,8 @@ const DESCRIPTIONS = {
 };
 
 const cached = process.argv.includes('--cached');
+// --only=places,roads → fetch just these; re-process the rest from data/raw.
+const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7).split(',');
 await fs.mkdir(RAW, { recursive: true });
 await fs.mkdir(OUT, { recursive: true });
 const datasets = {};
@@ -249,7 +275,7 @@ const datasets = {};
 for (const [name, query] of Object.entries(QUERIES)) {
   const rawPath = path.join(RAW, `${name}.json`);
   let raw;
-  if (cached) raw = JSON.parse(await fs.readFile(rawPath, 'utf8'));
+  if (cached || (only && !only.includes(name))) raw = JSON.parse(await fs.readFile(rawPath, 'utf8'));
   else {
     console.log(`Fetching ${name}…`);
     raw = await overpass(name, query);
@@ -259,6 +285,7 @@ for (const [name, query] of Object.entries(QUERIES)) {
   await fs.writeFile(path.join(OUT, `${name}.geojson`), JSON.stringify({ type: 'FeatureCollection', features }));
   datasets[name] = {
     file: `data/${name}.geojson`,
+    fetched_at: cached || (only && !only.includes(name)) ? null : new Date().toISOString(),
     description: DESCRIPTIONS[name],
     features: features.length,
     source: 'OpenStreetMap contributors via Overpass API',
@@ -270,9 +297,11 @@ for (const [name, query] of Object.entries(QUERIES)) {
 }
 
 const metaPath = path.join(OUT, 'metadata.json');
-const prev = cached ? JSON.parse(await fs.readFile(metaPath, 'utf8').catch(() => '{}')) : {};
+const prev = JSON.parse(await fs.readFile(metaPath, 'utf8').catch(() => '{}'));
+for (const [name, d] of Object.entries(datasets)) d.fetched_at ??= prev.datasets?.[name]?.fetched_at ?? prev.extracted_at ?? null;
 await fs.writeFile(metaPath, JSON.stringify({
   extracted_at: cached && prev.extracted_at ? prev.extracted_at : new Date().toISOString(),
+  // Per-dataset fetch times (an --only run re-fetches some datasets and re-processes the rest).
   bbox: { south: BBOX[0], west: BBOX[1], north: BBOX[2], east: BBOX[3] },
   processing: [
     'Overpass API query per dataset (raw responses in data/raw/, git-ignored)',

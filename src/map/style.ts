@@ -1,4 +1,4 @@
-import type { ExpressionSpecification, StyleSpecification } from 'maplibre-gl';
+import type { ExpressionSpecification, StyleSpecification, VectorSourceSpecification } from 'maplibre-gl';
 
 // "Light Atlas": an original Nashik 2030 basemap over OpenFreeMap's OpenMapTiles-schema
 // vector tiles (OSM data). Everything here is style-spec only, so it renders identically in
@@ -59,14 +59,43 @@ const waterLine = (i: number) => ({
 
 export const NASHIK_CENTER: [number, number] = [73.7898, 19.9975];
 
+export const OPENFREEMAP_TILES = 'https://tiles.openfreemap.org/planet';
+export const OPENFREEMAP_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
+const OSM_ATTRIBUTION = '<a href="https://www.openmaptiles.org/" target="_blank">© OpenMapTiles</a> Data <a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors</a>';
+
+/** Self-hosted Nashik PMTiles (OpenMapTiles schema) when deployed; OpenFreeMap otherwise. */
+export function tileSource(available: boolean, base: string): VectorSourceSpecification {
+  return available
+    ? { type: 'vector', url: `pmtiles://${base}tiles/nashik.pmtiles`, attribution: OSM_ATTRIBUTION }
+    : { type: 'vector', url: OPENFREEMAP_TILES, attribution: `<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ${OSM_ATTRIBUTION}` };
+}
+
+/** True when a static file exists (a 404 or an HTML fallback page counts as missing). */
+export async function probe(url: string): Promise<boolean> {
+  try {
+    const r = await fetch(url, { method: 'HEAD', cache: 'no-cache' });
+    return r.ok && !(r.headers.get('content-type') ?? '').includes('text/html');
+  } catch {
+    return false;
+  }
+}
+
+export function buildStyle(opts: { pmtiles: boolean; base: string; ownFonts: boolean }): StyleSpecification {
+  return {
+    ...baseStyle,
+    glyphs: opts.ownFonts ? `${opts.base}fonts/{fontstack}/{range}.pbf` : OPENFREEMAP_GLYPHS,
+    sources: { ...baseStyle.sources, omt: tileSource(opts.pmtiles, opts.base) },
+  };
+}
+
 export const baseStyle: StyleSpecification = {
   version: 8,
-  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  glyphs: OPENFREEMAP_GLYPHS,
   sources: {
     omt: {
       type: 'vector',
-      url: 'https://tiles.openfreemap.org/planet',
-      attribution: '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> <a href="https://www.openmaptiles.org/" target="_blank">© OpenMapTiles</a> Data <a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors</a>',
+      url: OPENFREEMAP_TILES,
+      attribution: `<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> ${OSM_ATTRIBUTION}`,
     },
     dem: {
       type: 'raster-dem',

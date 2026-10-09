@@ -25,7 +25,10 @@ export type EntityType =
   | 'tourism'
   | 'government'
   | 'bus_stop'
-  | 'railway_station';
+  | 'railway_station'
+  | 'landmark'
+  | 'toilets'
+  | 'drinking_water';
 
 export interface EntityProps {
   /** Stable ID: `<prefix>_<n|w|r><osm id>`, e.g. `place_n1671916246`. */

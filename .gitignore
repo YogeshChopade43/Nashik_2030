@@ -4,3 +4,10 @@ data/raw
 *.log
 .DS_Store
 .playwright-mcp
+.superpowers/
+pipeline/.venv
+pipeline/.cache
+__pycache__/
+public/live/
+public/tiles/
+public/fonts/

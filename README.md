@@ -14,6 +14,7 @@ npm run dev        # http://localhost:5173
 npm test           # geo utility tests (math + checks against the real Nashik extract)
 npm run build      # type-check + production build into dist/
 npm run data       # re-extract city data from OpenStreetMap (optional; data is committed)
+npm run data -- --only=places   # re-fetch just one dataset, re-process the rest from data/raw
 ```
 
 The base map, fonts and terrain stream from public tile servers, so the app needs an internet connection.
@@ -39,6 +40,11 @@ The base map, fonts and terrain stream from public tile servers, so the app need
 - **Share links:** the URL tracks the selection (`#view=…&place=<entity id>` or `&pin=<lat>,<lng>`), so a shared link reopens that exact place. The Share button uses the phone's native share sheet, or copy / WhatsApp on desktop.
 - **Approximate locality areas:** OSM maps localities as points, so selecting one shades its *nearest-locality zone* (a Voronoi cell, capped at 3 km) and counts the places inside it. These areas are clearly labelled as approximate and are not official boundaries.
 - **Layers fade** in and out when toggled.
+- **Filters** (the funnel icon on a layer row): filter hospitals by emergency services, listed specialities or website; religious places by religion; and any place layer to those edited in the last year. Filters use real OSM tags only, so untagged places are hidden, not assumed to lack the feature. Chips with no matches are hidden, and cluster counts update.
+- **Legend** (the list icon in the map controls): a key for the symbols and line styles of the layers currently shown.
+- **How to find it:** every place and dropped pin gets landmark-based directions, the way people in Nashik give them. For example, *"On Mahshoba Lane, 209 m north-west of Raviwar Karanja Circle, near Sri Omkeshwar Mahadev Mandir · Gangawadi area"*. Copy or send them with the pin link, or use **Share as directions** from the right-click / long-press menu. Directions are built deterministically from real OSM roads and landmarks (`src/lib/address.ts`), preferring the chowks, nakas and circles people actually navigate by.
+- **Local landmarks** layer: named chowks, nakas, circles and signals, petrol pumps, banks, pharmacies and water tanks from OSM. Petrol pumps named only "Fuel" are named by their brand, or skipped if they have none.
+- **Toilets & drinking water** layer, with Free / Women's / Accessible filters wherever the OSM tags exist. Only 12 public toilets are mapped in OSM so far, so the layer links to the OpenStreetMap editor to help map more.
 - **Data sources & licenses** (bottom of the layer panel) lists every dataset, its entity count, OSM snapshot time, processing steps, and what is unavailable.
 
 ## Data sources & licenses
@@ -89,6 +95,49 @@ To refresh after OSM edits, run `npm run data`. If you only changed processing c
 - **"CBS" (Central Bus Stand).** No OSM feature is named or tagged "CBS" or "Central Bus Stand", so search returns nothing for it rather than guessing. Nearby real bus stands, such as Thakkar Bazzar Bus Stand and Mela Bus Stand, are searchable. Adding the name upstream in OSM would fix this at the source.
 - **Bus routes and intersections** were not extracted in Sprint 1. City-bus route relations in OSM are incomplete.
 - **Coverage is only as complete as OSM.** For example, schools are under-mapped (35). Gaps are not filled in. The source-ID links in the inspector open each feature on openstreetmap.org, where it can be improved.
+
+## Live data (free, unlimited, self-hosted)
+
+Live feeds are built by scheduled GitHub Actions jobs. The jobs fetch each source and write small JSON files, and GitHub Pages serves those files with the app. It costs ₹0 to run, and every user reads static files, so there's no per-user limit. No freemium or metered API is used.
+
+| Feed | Source & license | Refresh | Needs |
+|---|---|---|---|
+| `live/weather.json` | ECMWF Open Data, IFS 0.25° (CC BY 4.0) | every 3 h (00/12 UTC runs, 0–144 h) | nothing |
+| `live/river.json` | Copernicus GloFAS forecast via EWDS (CC BY 4.0) | daily | `EWDS_API_KEY` secret |
+| `live/imd.json` | India Meteorological Department API | every 3 h | `IMD_API_KEY` secret |
+| `tiles/nashik.pmtiles` | OSM (Geofabrik western India) → Planetiler, OpenMapTiles schema (ODbL) | weekly | nothing |
+| `fonts/…` | Noto Sans glyphs (OFL) | each deploy | nothing |
+
+**How the files behave:**
+- **Provenance:** every feed file carries `source`, `license`, `attribution`, `fetched_at` and `valid_until`.
+- **Freshness states:** the app's *Live Nashik* pill and panel show "updated X ago". A feed more than one interval past `valid_until` is shown greyed out as **Stale**. A missing or malformed file shows **Not available**. Nothing questionable is ever displayed as current.
+- **Failures:** a failed feed keeps its previous file. For IMD, an auth failure is recorded as a status and shown as "IMD feed unavailable".
+- **Fallbacks:** until the first tile build is deployed, the map automatically uses OpenFreeMap tiles and fonts.
+
+**Workflows:**
+- `.github/workflows/live.yml` fetches the feeds;
+- `tiles.yml` builds the tiles;
+- `deploy.yml` builds the app with the latest data, tiles and fonts, and publishes it to Pages.
+
+**One-time setup:**
+1. Enable GitHub Pages (Settings → Pages → Source: *GitHub Actions*).
+2. Optionally add the `EWDS_API_KEY` (a free Copernicus EWDS account) and `IMD_API_KEY` (from api.imd.gov.in) repo secrets.
+3. Run *tiles* once manually, then *live*.
+
+**Run the pipeline locally:**
+```bash
+python -m venv pipeline/.venv && pipeline/.venv/Scripts/pip install -r pipeline/requirements.txt   # bin/ on Linux/macOS
+pipeline/.venv/Scripts/python -m pipeline.run      # writes public/live/*.json (weather works with no key)
+pipeline/.venv/Scripts/python -m pipeline.fonts    # self-hosted glyphs into public/fonts (~100 MB)
+pipeline/.venv/Scripts/python -m pytest pipeline/tests
+```
+In Windows Git Bash, prefix base-path builds with `MSYS_NO_PATHCONV=1`, because Git Bash rewrites `/Nashik_2030/` into a Windows path. For example: `MSYS_NO_PATHCONV=1 PAGES_BASE=/Nashik_2030/ npm run build`.
+
+**Honest limits:**
+- **Weather** is interpolated from a 0.25° (~27 km) grid, so values are approximate for a specific street. Each run downloads ~175 MB.
+- **River flow** uses the GloFAS cell with the largest forecast discharge within 0.1° of Ramkund, on a ~5 km model grid, so it's approximate. Flood-threshold levels aren't included yet.
+- **IMD** may require IP whitelisting. GitHub-hosted runners don't have fixed IPs, so if IMD enforces whitelisting this feed needs a fixed-IP runner.
+- **No live traffic or road closures:** no free, unlimited source exists.
 
 ## Architecture
 

@@ -46,15 +46,15 @@ const LABEL_FONT = ['Noto Sans Regular'];
 const FADE = { duration: 150 };
 
 /** Clustered layer for one place type: paper clusters → atlas icon markers → labels. */
-function placeLayer(type: EntityType, label: string, color: string, defaultVisible: boolean, group = 'places'): MapLayerDef {
+function placeLayer(type: EntityType, label: string, color: string, defaultVisible: boolean, group = 'places', types: EntityType[] = [type]): MapLayerDef {
   const src = `src-${type}`;
   const ids = { shadow: `${type}-cluster-shadow`, cluster: `${type}-cluster`, count: `${type}-cluster-count`, halo: `${type}-halo`, point: `${type}-point`, label: `${type}-label` };
   return {
-    id: type, group, label, color, defaultVisible, types: [type],
+    id: type, group, label, color, defaultVisible, types,
     styleLayers: Object.values(ids),
     interactive: [ids.point, ids.label, ids.cluster],
     install(map, data) {
-      map.addSource(src, { type: 'geojson', data: fc(data.byType[type] ?? []), cluster: true, clusterMaxZoom: 14, clusterRadius: 44, promoteId: 'id' });
+      map.addSource(src, { type: 'geojson', data: fc(types.flatMap((t) => data.byType[t] ?? [])), cluster: true, clusterMaxZoom: 14, clusterRadius: 44, promoteId: 'id' });
       const clustered: ExpressionSpecification = ['has', 'point_count'];
       const radius: ExpressionSpecification = ['step', ['get', 'point_count'], 11, 10, 13.5, 40, 16.5];
       map.addLayer({
@@ -76,7 +76,7 @@ function placeLayer(type: EntityType, label: string, color: string, defaultVisib
       });
       map.addLayer({
         id: ids.point, type: 'symbol', source: src, filter: ['!', clustered],
-        layout: { 'icon-image': markerId(type, color), 'icon-size': w(11, 0.55, 15, 0.8, 17, 1), 'icon-allow-overlap': true },
+        layout: { 'icon-image': types.length > 1 ? ['concat', 'marker-', ['get', 'type'], '-', color.slice(1).toLowerCase()] : markerId(type, color), 'icon-size': w(11, 0.55, 15, 0.8, 17, 1), 'icon-allow-overlap': true },
       });
       map.addLayer({
         id: ids.label, type: 'symbol', source: src, filter: ['!', clustered], minzoom: 14.5,
@@ -115,6 +115,8 @@ export const LAYERS: MapLayerDef[] = [
   placeLayer('religious', 'Religious places', '#c96a1c', false),
   placeLayer('tourism', 'Tourist places & heritage', '#0d8495', true),
   placeLayer('government', 'Government facilities', '#3a6cb3', false),
+  placeLayer('landmark', 'Local landmarks', '#8a5a2b', false),
+  placeLayer('toilets', 'Toilets & drinking water', '#2a7fb8', false, 'places', ['toilets', 'drinking_water']),
 
   // ---------- transport ----------
   {

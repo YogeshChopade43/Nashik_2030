@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { CityEntity, EntityType } from '../types/entity';
-import { TYPE_LABEL, type CityData } from '../data/city';
+import { TYPE_LABEL, displayName, type CityData } from '../data/city';
 import { bearing, compass, formatDistance, nearby, type LngLat } from '../lib/geo';
 import { LAYER_BY_TYPE, glyphOf } from '../map/layers';
 import { Icon, Mark } from './Icon';
@@ -15,7 +15,7 @@ export interface NearbyOrigin {
 export const RADII = [500, 1000, 2000, 5000];
 
 const CATEGORIES: { id: string; label: string; types: EntityType[] }[] = [
-  { id: 'all', label: 'All', types: ['hospital', 'college', 'school', 'bus_stop', 'railway_station', 'market', 'religious', 'tourism', 'government', 'park'] },
+  { id: 'all', label: 'All', types: ['hospital', 'college', 'school', 'bus_stop', 'railway_station', 'market', 'religious', 'tourism', 'government', 'park', 'landmark', 'toilets', 'drinking_water'] },
   { id: 'hospital', label: 'Hospitals', types: ['hospital'] },
   { id: 'college', label: 'Colleges', types: ['college'] },
   { id: 'school', label: 'Schools', types: ['school'] },
@@ -25,6 +25,8 @@ const CATEGORIES: { id: string; label: string; types: EntityType[] }[] = [
   { id: 'tourism', label: 'Tourism', types: ['tourism'] },
   { id: 'government', label: 'Government', types: ['government'] },
   { id: 'park', label: 'Parks', types: ['park'] },
+  { id: 'toilets', label: 'Toilets & water', types: ['toilets', 'drinking_water'] },
+  { id: 'landmark', label: 'Landmarks', types: ['landmark'] },
 ];
 
 const LIMIT = 60;
@@ -104,7 +106,7 @@ export function Nearby({ origin, radius, onRadius, data, onSelect, onClose }: {
                   <button onClick={() => onSelect(h.entity)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-ink/[0.04] focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none">
                     <Mark glyph={glyphOf(p.type)} color={color} className="size-8" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] text-fg">{p.name ?? `Unnamed ${TYPE_LABEL[p.type].toLowerCase()}`}</span>
+                      <span className="block truncate text-[14px] text-fg">{displayName(p)}</span>
                       <span className="block truncate text-[12px] text-muted">{TYPE_LABEL[p.type]}{p.category && p.category !== p.type ? ` · ${p.category.replace(/_/g, ' ')}` : ''}</span>
                     </span>
                     <span className="shrink-0 text-right">

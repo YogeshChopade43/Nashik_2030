@@ -14,7 +14,7 @@ export interface CityData {
 }
 
 export async function loadCity(): Promise<CityData> {
-  const get = (p: string) => fetch(`/data/${p}`).then((r) => {
+  const get = (p: string) => fetch(`${import.meta.env.BASE_URL}data/${p}`).then((r) => {
     if (!r.ok) throw new Error(`Failed to load ${p}: ${r.status}`);
     return r.json();
   });
@@ -33,7 +33,12 @@ export const TYPE_LABEL: Record<EntityType, string> = {
   river: 'River', water_body: 'Water body', park: 'Park', hospital: 'Hospital', school: 'School',
   college: 'College', market: 'Market', religious: 'Religious place', tourism: 'Tourist place',
   government: 'Government facility', bus_stop: 'Bus stop', railway_station: 'Railway station',
+  landmark: 'Landmark', toilets: 'Public toilet', drinking_water: 'Drinking water',
 };
+
+/** Name to show; unnamed infrastructure (bus stops, toilets, water points) is labelled by its type. */
+export const displayName = (p: { name: string | null; type: EntityType }) =>
+  p.name ?? (['bus_stop', 'toilets', 'drinking_water'].includes(p.type) ? TYPE_LABEL[p.type] : `Unnamed ${TYPE_LABEL[p.type].toLowerCase()}`);
 
 /** Category keywords → layer id. Lets "hospitals" or "temples" search for a whole layer. */
 const CATEGORY_WORDS: Record<string, string[]> = {
@@ -47,6 +52,9 @@ const CATEGORY_WORDS: Record<string, string[]> = {
   government: ['government', 'police', 'post office', 'court', 'fire station', 'office'],
   bus_stop: ['bus', 'bus stop', 'bus stops', 'bus station', 'transit'],
   railway_station: ['railway', 'railway station', 'train', 'station'],
+  landmark: ['landmark', 'landmarks', 'chowk', 'circle', 'naka', 'signal', 'petrol pump', 'petrol', 'bank', 'atm', 'pharmacy', 'medical store'],
+  toilets: ['toilet', 'toilets', 'washroom', 'restroom', 'public toilet', 'urinal'],
+  drinking_water: ['drinking water', 'water point', 'water tap'],
   locality: ['locality', 'localities', 'neighbourhood', 'neighborhood', 'area'],
 };
 
@@ -56,7 +64,7 @@ export type SearchItem =
   | { kind: 'category'; keys: string[]; label: string; sub: string; layer: string; type: EntityType; rank: number };
 
 const TYPE_RANK: Partial<Record<EntityType, number>> = {
-  city: 14, locality: 10, railway_station: 10, tourism: 11, road_segment: 8, river: 8, water_body: 7,
+  city: 14, locality: 10, railway_station: 10, tourism: 11, landmark: 9, road_segment: 8, river: 8, water_body: 7,
   college: 6, hospital: 6, admin_boundary: 5, market: 5, park: 4, government: 4, religious: 4, school: 4, bus_stop: 2,
 };
 

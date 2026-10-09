@@ -1,0 +1,101 @@
+# Build the app with the latest live data, tiles and fonts, and publish to GitHub Pages.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      live_from_this_run:
+        type: boolean
+        default: false
+      tiles_from_this_run:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Live data: from the calling run if it just fetched it, otherwise the latest successful one.
+      - if: ${{ inputs.live_from_this_run }}
+        uses: actions/download-artifact@v4
+        with:
+          name: live
+          path: public/live
+      - if: ${{ !inputs.live_from_this_run }}
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: live.yml
+          name: live
+          path: public/live
+          workflow_conclusion: success
+          if_no_artifact_found: warn
+
+      # Tiles: same rule. If none exist yet, the app falls back to OpenFreeMap automatically.
+      - if: ${{ inputs.tiles_from_this_run }}
+        uses: actions/download-artifact@v4
+        with:
+          name: tiles
+          path: public/tiles
+      - if: ${{ !inputs.tiles_from_this_run }}
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: tiles.yml
+          name: tiles
+          path: public/tiles
+          workflow_conclusion: success
+          if_no_artifact_found: warn
+
+      # Glyphs change rarely: cache them so each deploy doesn't re-download ~770 files.
+      - uses: actions/cache@v4
+        with:
+          path: public/fonts
+          key: glyphs-noto-sans-v1
+      - name: Self-host glyphs
+        # fonts.py removes the folder on any error, so the app falls back to OpenFreeMap glyphs
+        # instead of the deploy failing (live data still ships).
+        run: pip install requests && python -m pipeline.fonts
+      - name: Build
+        # GITHUB_REPOSITORY ("owner/repo") is always set; github.event.repository is absent on `schedule`.
+        run: |
+          export PAGES_BASE="/${GITHUB_REPOSITORY#*/}/"
+          echo "PAGES_BASE=$PAGES_BASE"
+          case "$PAGES_BASE" in /?*/) ;; *) echo "bad base: $PAGES_BASE"; exit 1;; esac
+          npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4

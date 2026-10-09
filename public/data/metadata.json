@@ -1,5 +1,5 @@
 {
-  "extracted_at": "2026-10-09T11:04:33.941Z",
+  "extracted_at": "2026-10-09T17:06:00.167Z",
   "bbox": {
     "south": 19.85,
     "west": 73.5,
@@ -26,15 +26,17 @@
   "datasets": {
     "places": {
       "file": "data/places.geojson",
-      "description": "Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations",
-      "features": 564,
+      "fetched_at": "2026-10-09T17:06:00.058Z",
+      "description": "Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations, public toilets, drinking water, and local landmarks (named chowks/nakas/circles/signals, petrol pumps, banks, pharmacies, cinemas, water tanks)",
+      "features": 702,
       "source": "OpenStreetMap contributors via Overpass API",
       "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
-      "osm_data_timestamp": "2026-10-09T10:58:21Z",
-      "overpass_query": "[out:json][timeout:180][bbox:19.85,73.5,20.15,74.05];\n(\n  nwr[amenity~\"^(hospital|school|college|university|marketplace|place_of_worship|townhall|courthouse|police|fire_station|post_office|bus_station)$\"];\n  nwr[healthcare=hospital];\n  nwr[shop=mall];\n  nwr[tourism~\"^(attraction|museum|viewpoint|zoo|theme_park|gallery)$\"];\n  nwr[historic~\"^(monument|memorial|fort|castle|archaeological_site|ruins)$\"];\n  nwr[office=government];\n  node[highway=bus_stop];\n  nwr[railway~\"^(station|halt)$\"];\n);\nout center meta;"
+      "osm_data_timestamp": "2026-10-09T17:04:51Z",
+      "overpass_query": "[out:json][timeout:180][bbox:19.85,73.5,20.15,74.05];\n(\n  nwr[amenity~\"^(hospital|school|college|university|marketplace|place_of_worship|townhall|courthouse|police|fire_station|post_office|bus_station)$\"];\n  nwr[healthcare=hospital];\n  nwr[shop=mall];\n  nwr[tourism~\"^(attraction|museum|viewpoint|zoo|theme_park|gallery)$\"];\n  nwr[historic~\"^(monument|memorial|fort|castle|archaeological_site|ruins)$\"];\n  nwr[office=government];\n  node[highway=bus_stop];\n  nwr[railway~\"^(station|halt)$\"];\n  nwr[amenity~\"^(toilets|drinking_water|fuel|cinema)$\"];\n  nwr[amenity~\"^(bank|pharmacy)$\"][name];\n  node[highway~\"^(traffic_signals|mini_roundabout)$\"][name];\n  nwr[junction][name];\n  nwr[place=square][name];\n  nwr[man_made=water_tower][name];\n);\nout center meta;"
     },
     "roads": {
       "file": "data/roads.geojson",
+      "fetched_at": "2026-10-09T11:04:33.941Z",
       "description": "Named road segments (OSM ways), motorway through living_street",
       "features": 1102,
       "source": "OpenStreetMap contributors via Overpass API",
@@ -44,6 +46,7 @@
     },
     "parks": {
       "file": "data/parks.geojson",
+      "fetched_at": "2026-10-09T11:04:33.941Z",
       "description": "Parks and gardens (leisure=park|garden) as polygons",
       "features": 115,
       "source": "OpenStreetMap contributors via Overpass API",
@@ -53,6 +56,7 @@
     },
     "water": {
       "file": "data/water.geojson",
+      "fetched_at": "2026-10-09T11:04:33.941Z",
       "description": "Named rivers, streams, canals, lakes and reservoirs",
       "features": 66,
       "source": "OpenStreetMap contributors via Overpass API",
@@ -62,6 +66,7 @@
     },
     "localities": {
       "file": "data/localities.geojson",
+      "fetched_at": "2026-10-09T11:04:33.941Z",
       "description": "Settlement and locality points (place=city|town|suburb|neighbourhood|village|…)",
       "features": 134,
       "source": "OpenStreetMap contributors via Overpass API",
@@ -71,6 +76,7 @@
     },
     "boundaries": {
       "file": "data/boundaries.geojson",
+      "fetched_at": "2026-10-09T11:04:33.941Z",
       "description": "Taluka / sub-district administrative boundaries (admin_level=6), simplified ~30 m",
       "features": 7,
       "source": "OpenStreetMap contributors via Overpass API",

@@ -1,0 +1,54 @@
+# Weekly: OSM (Geofabrik western India) → Planetiler (OpenMapTiles schema) → nashik.pmtiles → Pages deploy.
+name: tiles
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tiles
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download Planetiler
+        run: curl -fsSL -o planetiler.jar https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar
+      - name: Build Nashik PMTiles
+        run: >
+          java -Xmx6g -jar planetiler.jar
+          --download
+          --osm-url=https://download.geofabrik.de/asia/india/western-zone-latest.osm.pbf
+          --bounds=72.9,19.4,74.7,20.6
+          --maxzoom=14
+          --output=nashik.pmtiles
+      - name: Report size
+        run: ls -lh nashik.pmtiles
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tiles
+          path: nashik.pmtiles
+          retention-days: 90
+          if-no-files-found: error
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      tiles_from_this_run: true
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write

@@ -1,8 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { CityEntity, EntityProps, EntityType } from '../types/entity';
-import { TYPE_LABEL, type CityData, type NominatimHit } from '../data/city';
+import { TYPE_LABEL, displayName, type CityData, type NominatimHit } from '../data/city';
 import { centroid, formatDistance, length, nearby, pointInPolygon, reverseGeocode, type LngLat } from '../lib/geo';
 import { areaKm2 } from '../lib/zones';
+import { describePoint } from '../lib/address';
 import type { Polygon } from 'geojson';
 import { LAYER_BY_TYPE, glyphOf } from '../map/layers';
 import { Icon, Mark, type IconName } from './Icon';
@@ -35,6 +36,9 @@ const FIELDS: Partial<Record<EntityType, Field[]>> = {
   government: [['Category', category], ['Operator', t('operator')], ...CONTACT],
   bus_stop: [['Category', category], ['Operator', t('operator')]],
   railway_station: [['Category', category], ['Operator', t('operator')], ['Wikipedia', wiki]],
+  landmark: [['Kind', category], ['Brand', t('brand')], ['Operator', t('operator')], ['Opening hours', t('opening_hours')], ['Address', address]],
+  toilets: [['Kind', category], ['Free to use', (p) => (p.tags.fee === 'no' ? 'Yes' : p.tags.fee === 'yes' ? 'No (paid)' : null)], ["Women's", yesNo('female')], ["Men's", yesNo('male')], ['Wheelchair accessible', yesNo('wheelchair')], ['Access', t('access')], ['Operator', t('operator')]],
+  drinking_water: [['Kind', category], ['Access', t('access')]],
   road_segment: [['Road class', category], ['Reference', t('ref')], ['Lanes', t('lanes')], ['Max speed', t('maxspeed')], ['Surface', t('surface')], ['One-way', yesNo('oneway')], ['Bridge', yesNo('bridge')]],
   river: [['Waterway type', category], ['Wikipedia', wiki]],
   water_body: [['Water type', category], ['Wikipedia', wiki]],
@@ -44,7 +48,7 @@ const FIELDS: Partial<Record<EntityType, Field[]>> = {
   admin_boundary: [['Level', category], ['Wikipedia', wiki]],
 };
 
-const PLACE_TYPES: EntityType[] = ['hospital', 'school', 'college', 'market', 'religious', 'tourism', 'government', 'bus_stop', 'railway_station', 'park'];
+const PLACE_TYPES: EntityType[] = ['hospital', 'school', 'college', 'market', 'religious', 'tourism', 'government', 'bus_stop', 'railway_station', 'park', 'landmark', 'toilets', 'drinking_water'];
 const NA = <span className="text-muted/70">Not available</span>;
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -95,7 +99,7 @@ function Context({ point, data, exclude, onSelect, radius, isRoad }: { point: Ln
               <li key={h.entity.properties.id}>
                 <button onClick={() => onSelect(h.entity)} className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left hover:bg-ink/[0.04]">
                   <Mark glyph={glyphOf(h.entity.properties.type)} color={LAYER_BY_TYPE[h.entity.properties.type]?.color ?? '#8a8072'} className="size-5" />
-                  <span className="min-w-0 flex-1 truncate text-[13px]">{h.entity.properties.name ?? `Unnamed ${TYPE_LABEL[h.entity.properties.type].toLowerCase()}`}</span>
+                  <span className="min-w-0 flex-1 truncate text-[13px]">{displayName(h.entity.properties)}</span>
                   <span className="text-[11.5px] tabular-nums text-muted">{formatDistance(h.distance)}</span>
                 </button>
               </li>
@@ -123,6 +127,35 @@ function Provenance({ p }: { p: EntityProps }) {
         </Row>
       </dl>
     </Section>
+  );
+}
+
+/** "How to find it": landmark-based directions people can read out or send. */
+function DirectionsCard({ point, data, exclude, title }: { point: LngLat; data: CityData; exclude?: string; title: string }) {
+  const dir = useMemo(() => describePoint(point, { places: data.files.places, roads: data.files.roads, localities: data.files.localities }, exclude), [point[0], point[1], data, exclude]);
+  const [copied, setCopied] = useState(false);
+  const message = () => `${title}\n${dir.text}\n${location.href}`;
+  async function copy() {
+    try { await navigator.clipboard.writeText(message()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ }
+  }
+  async function share() {
+    if (navigator.share) { try { await navigator.share({ title, text: `${dir.text}`, url: location.href }); } catch { /* cancelled */ } }
+    else window.open(`https://wa.me/?text=${encodeURIComponent(message())}`, '_blank', 'noopener');
+  }
+  return (
+    <section className="mx-4 mb-3 rounded-xl border border-saffron/25 bg-saffron/[0.05] px-3.5 py-3">
+      <h3 className="mb-1 text-[10.5px] font-semibold tracking-[0.18em] text-saffron uppercase">How to find it</h3>
+      <p className="font-display text-[15.5px] leading-snug text-fg">{dir.text}</p>
+      <div className="mt-2.5 flex gap-2">
+        <button onClick={copy} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-[#fffdf8] px-3 text-[12.5px] font-medium text-fg/85 hover:border-accent/30 hover:text-fg">
+          <Icon name="copy" className="size-3.5 text-accent" />{copied ? 'Copied with link' : 'Copy directions'}
+        </button>
+        <button onClick={share} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-[#fffdf8] px-3 text-[12.5px] font-medium text-fg/85 hover:border-accent/30 hover:text-fg">
+          <Icon name="share" className="size-3.5 text-accent" />Send
+        </button>
+      </div>
+      <p className="mt-2 text-[10.5px] leading-snug text-muted">Built from OpenStreetMap roads and landmarks. Distances are straight-line.</p>
+    </section>
   );
 }
 
@@ -161,7 +194,7 @@ function ActionButton({ icon, label, onClick }: { icon: IconName; label: string;
   );
 }
 
-const ZONE_TYPES: EntityType[] = ['hospital', 'school', 'college', 'market', 'religious', 'tourism', 'government', 'park', 'bus_stop', 'railway_station'];
+const ZONE_TYPES: EntityType[] = ['hospital', 'school', 'college', 'market', 'religious', 'tourism', 'government', 'park', 'bus_stop', 'railway_station', 'landmark', 'toilets', 'drinking_water'];
 
 function ZoneSummary({ zone, data, name }: { zone: Polygon; data: CityData; name: string }) {
   const counts = useMemo(() => {
@@ -213,9 +246,10 @@ export function Inspector({ selection, data, onSelect, onClose, onNearby, onBack
     const isRoad = p.type === 'road_segment';
     const point = centroid(selection.entity.geometry);
     origin = { point, label: p.name ?? TYPE_LABEL[p.type], fromId: p.id };
-    header = { color: LAYER_BY_TYPE[p.type]?.color ?? '#8a8072', glyph: glyphOf(p.type), kicker: TYPE_LABEL[p.type], title: p.name ?? `Unnamed ${TYPE_LABEL[p.type].toLowerCase()}`, local: p.name_local };
+    header = { color: LAYER_BY_TYPE[p.type]?.color ?? '#8a8072', glyph: glyphOf(p.type), kicker: TYPE_LABEL[p.type], title: displayName(p), local: p.name_local };
     body = (
       <>
+        {!isRoad && !['admin_boundary', 'river', 'water_body', 'city'].includes(p.type) && <DirectionsCard point={point} data={data} exclude={p.id} title={displayName(p)} />}
         {isRoad && (
           <Section title="Whole road">
             <dl>
@@ -243,6 +277,7 @@ export function Inspector({ selection, data, onSelect, onClose, onNearby, onBack
     header = { color: '#1f5f7a', glyph: glyphOf('localities'), kicker: selection.nominatim ? 'Search result · Nominatim' : 'Dropped pin', title: selection.nominatim?.label ?? fmtCoord(selection.lngLat) };
     body = (
       <>
+        <DirectionsCard point={selection.lngLat} data={data} title={selection.nominatim?.label ?? 'A spot in Nashik'} />
         {(b || selection.nominatim) && (
           <Section title="At this point">
             <dl>

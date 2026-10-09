@@ -1,0 +1,9 @@
+numpy
+requests
+pytest
+ecmwf-opendata
+eccodes
+cfgrib
+xarray
+cdsapi
+pyyaml

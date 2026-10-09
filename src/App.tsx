@@ -4,17 +4,24 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { loadCity, type CityData, type NominatimHit, type SearchItem } from './data/city';
 import { bbox, circle, distance, roadSegmentsByName, type LngLat } from './lib/geo';
 import { localityZones } from './lib/zones';
+import { describePoint } from './lib/address';
 import { registerImages } from './map/icons';
 import { LAYERS, LAYER_BY_TYPE, setLayerVisibility } from './map/layers';
-import { baseStyle, NASHIK_CENTER } from './map/style';
+import { buildStyle, NASHIK_CENTER, probe } from './map/style';
+import { Protocol } from 'pmtiles';
 import type { CityEntity } from './types/entity';
 import { Icon, type IconName } from './components/Icon';
 import { Inspector, type Selection } from './components/Inspector';
 import { LayerPanel, SourcesDialog } from './components/LayerPanel';
 import { Nearby, type NearbyOrigin } from './components/Nearby';
+import { Legend } from './components/Legend';
+import { LiveCard, LivePill, WarningBanner, type LiveFeeds } from './components/LiveCard';
+import { loadLive } from './data/live';
+import { FILTERS, applyFilters } from './map/filters';
 import { SearchBar } from './components/SearchBar';
 
 const STORAGE_KEY = 'n2030.layers.v1';
+const FILTER_KEY = 'n2030.filters.v1';
 const DEFAULT_VISIBLE = Object.fromEntries(LAYERS.map((l) => [l.id, l.defaultVisible]));
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 const REGION: [[number, number], [number, number]] = [[72.9, 19.4], [74.7, 20.6]];
@@ -33,6 +40,18 @@ function setSelectionParam(param: string | null) {
 function loadVisible(): Record<string, boolean> {
   try { return { ...DEFAULT_VISIBLE, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') }; }
   catch { return DEFAULT_VISIBLE; }
+}
+
+function loadFilters(): Record<string, string[]> {
+  try { return JSON.parse(localStorage.getItem(FILTER_KEY) ?? '{}'); }
+  catch { return {}; }
+}
+
+let pmtilesRegistered = false;
+function registerPmtiles() {
+  if (pmtilesRegistered) return;
+  maplibregl.addProtocol('pmtiles', new Protocol().tile);
+  pmtilesRegistered = true;
 }
 
 function useMediaQuery(q: string) {
@@ -58,6 +77,11 @@ export default function App() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [near, setNear] = useState<{ origin: NearbyOrigin; radius: number } | null>(null);
+  const [filters, setFilters] = useState(loadFilters);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [live, setLive] = useState<LiveFeeds | null>(null);
+  const [liveOpen, setLiveOpen] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const restored = useRef(false);
   const [ctx, setCtx] = useState<{ x: number; y: number; lngLat: LngLat } | null>(null);
   const ctxRef = useRef(ctx);
@@ -67,35 +91,55 @@ export default function App() {
 
   // ---- map + data bootstrap ----
   useEffect(() => {
-    const m = new maplibregl.Map({
-      container: container.current!,
-      style: baseStyle,
-      center: NASHIK_CENTER,
-      zoom: 12.4,
-      minZoom: 8,
-      maxZoom: 19,
-      maxBounds: REGION,
-      hash: 'view',
-      attributionControl: { compact: true },
-      maxPitch: 0, // flat atlas on web and app alike; rotation stays
-      touchPitch: false,
-    });
-    registerImages(m);
-    m.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
-    m.on('load', () => {
-      // Start the attribution collapsed on phones so it doesn't cover controls (the ⓘ button reopens it).
-      if (window.matchMedia('(max-width: 767px)').matches) m.getContainer().querySelector('.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show');
-      setMap(m);
-    });
-    if (import.meta.env.DEV) Object.assign(window, { map: m }); // debugging aid
+    let m: MLMap | undefined;
+    let cancelled = false;
+    (async () => {
+      // Self-hosted tiles/fonts when deployed (absolute base: MapLibre resolves pmtiles:// and glyph URLs as-is).
+      const base = new URL(import.meta.env.BASE_URL, location.href).href;
+      const [pmtiles, ownFonts] = await Promise.all([probe(`${base}tiles/nashik.pmtiles`), probe(`${base}fonts/Noto Sans Regular/0-255.pbf`)]);
+      if (cancelled) return;
+      if (pmtiles) registerPmtiles();
+      m = new maplibregl.Map({
+        container: container.current!,
+        style: buildStyle({ pmtiles, base, ownFonts }),
+        center: NASHIK_CENTER,
+        zoom: 12.4,
+        minZoom: 8,
+        maxZoom: 19,
+        maxBounds: REGION,
+        hash: 'view',
+        attributionControl: { compact: true },
+        maxPitch: 0, // flat atlas on web and app alike; rotation stays
+        touchPitch: false,
+      });
+      const map = m;
+      registerImages(map);
+      map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-left');
+      map.on('load', () => {
+        // Start the attribution collapsed on phones so it doesn't cover controls (the ⓘ button reopens it).
+        if (window.matchMedia('(max-width: 767px)').matches) map.getContainer().querySelector('.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show');
+        setMap(map);
+      });
+      if (import.meta.env.DEV) Object.assign(window, { map }); // debugging aid
+    })();
     loadCity().then(setData).catch((e) => setToast(`Could not load city data: ${e.message}`));
     return () => {
+      cancelled = true;
       // map.remove() strips the URL hash; keep the deep link across StrictMode/HMR remounts.
       const hash = location.hash;
-      m.remove();
+      m?.remove();
       if (hash) history.replaceState(history.state, '', hash);
       setMap(null); setInstalled(false);
     };
+  }, []);
+
+  // Live feeds (static JSON from the scheduled pipeline): load now, refresh every 15 min.
+  useEffect(() => {
+    let alive = true;
+    const load = () => loadLive().then((f) => alive && setLive(f)).catch(() => {});
+    load();
+    const id = setInterval(load, 15 * 60_000);
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
   useEffect(() => {
@@ -107,6 +151,22 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(visible)); } catch { /* storage unavailable */ }
   }, [visible]);
+
+  useEffect(() => {
+    try { localStorage.setItem(FILTER_KEY, JSON.stringify(filters)); } catch { /* storage unavailable */ }
+  }, [filters]);
+
+  // Filters replace the layer's source data, so cluster counts reflect only matching places.
+  useEffect(() => {
+    if (!map || !data || !installed) return;
+    const ctx = { asOf: Date.parse(data.meta.extracted_at) };
+    for (const def of LAYERS) {
+      const defs = FILTERS[def.id];
+      if (!defs) continue;
+      const all = (def.types ?? []).flatMap((t) => data.byType[t] ?? []);
+      map.getSource<GeoJSONSource>(`src-${def.id}`)?.setData({ type: 'FeatureCollection', features: applyFilters(all, defs, filters[def.id] ?? [], ctx) });
+    }
+  }, [map, data, installed, filters]);
 
   // ---- install overlay layers once both are ready ----
   useEffect(() => {
@@ -159,7 +219,7 @@ export default function App() {
   // ---- selection helpers ----
   const padding = useCallback((): PaddingOptions => (isMobile
     ? { top: 80, bottom: Math.round(window.innerHeight * 0.55), left: 30, right: 30 }
-    : { top: 90, bottom: 50, left: layersOpen ? 340 : 50, right: 420 }), [isMobile, layersOpen]);
+    : { top: 90, bottom: 50, left: layersOpen ? 360 : 50, right: 420 }), [isMobile, layersOpen]);
 
   const selectEntity = useCallback((e: CityEntity, fly = true) => {
     if (!map || !data) return;
@@ -390,13 +450,31 @@ export default function App() {
         <div className="pointer-events-auto min-w-0 flex-1 md:max-w-[440px] md:flex-none md:basis-[440px]">
           <SearchBar data={data} onPick={onPick} onPickNominatim={onPickNominatim} />
         </div>
+        {live && !isMobile && (
+          <div className="pointer-events-auto relative">
+            <LivePill feeds={live} open={liveOpen} onToggle={() => setLiveOpen((o) => !o)} />
+            {liveOpen && (
+              <aside className="glass rise absolute top-14 left-0 z-30 flex max-h-[calc(100vh-110px)] w-[340px] flex-col rounded-2xl" aria-label="Live Nashik">
+                <LiveCard feeds={live} onClose={() => setLiveOpen(false)} />
+              </aside>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Layer manager: left panel on desktop, bottom sheet on mobile */}
       {showLayers ? (
-        <aside className="glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[68vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:top-[84px] md:left-4 md:max-h-[calc(100%-124px)] md:w-[300px] md:rounded-2xl">
+        <aside className="glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[68vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:top-[84px] md:left-4 md:max-h-[calc(100%-124px)] md:w-[320px] md:rounded-2xl">
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-ink/15 md:hidden" />
-          <LayerPanel visible={visible} onToggle={(id, on) => setVisible((v) => ({ ...v, [id]: on }))} data={data} onShowSources={() => setSourcesOpen(true)} onClose={() => setLayersOpen(false)} />
+          <LayerPanel
+            visible={visible}
+            onToggle={(id, on) => setVisible((v) => ({ ...v, [id]: on }))}
+            data={data}
+            onShowSources={() => setSourcesOpen(true)}
+            onClose={() => setLayersOpen(false)}
+            filters={filters}
+            onFilters={(id, ids) => setFilters((f) => ({ ...f, [id]: ids }))}
+          />
         </aside>
       ) : (
         <button
@@ -437,7 +515,16 @@ export default function App() {
         </aside>
       )}
 
-      {map && <MapControls map={map} hidden={isMobile && (panelOpen || showLayers)} raised={!isMobile && panelOpen} onToast={setToast} onNearby={nearbyHere} />}
+      {map && <MapControls map={map} hidden={isMobile && (panelOpen || showLayers || legendOpen)} raised={!isMobile && panelOpen} onToast={setToast} onNearby={nearbyHere} onLegend={() => setLegendOpen((o) => !o)} legendOpen={legendOpen} />}
+      {legendOpen && (
+        <aside
+          className={`glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[55vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:bottom-10 md:max-h-[calc(100%-160px)] md:w-[260px] md:rounded-2xl ${panelOpen ? 'md:right-[468px]' : 'md:right-[72px]'}`}
+          aria-label="Map legend"
+        >
+          <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink/15 md:hidden" />
+          <Legend visible={visible} onClose={() => setLegendOpen(false)} />
+        </aside>
+      )}
       {map && !isMobile && <CursorReadout map={map} />}
 
       {!data && !toast && (
@@ -462,19 +549,37 @@ export default function App() {
             setSelection({ kind: 'location', lngLat: ctx.lngLat, basemap: base && { layer: base.sourceLayer ?? base.layer.id, props: base.properties } });
           }}
           onToast={setToast}
+          describe={(p) => (data ? describePoint(p, { places: data.files.places, roads: data.files.roads, localities: data.files.localities }).text : '')}
         />
+      )}
+      {live && !bannerDismissed && (
+        <div className="pointer-events-auto absolute top-[76px] left-1/2 z-30 w-[min(560px,calc(100%-24px))] -translate-x-1/2 max-md:top-[68px]">
+          <WarningBanner imd={live.imd} onDismiss={() => setBannerDismissed(true)} />
+        </div>
+      )}
+      {live && isMobile && !panelOpen && !showLayers && !legendOpen && !liveOpen && (
+        <div className="absolute bottom-[max(4.25rem,calc(env(safe-area-inset-bottom)+3.25rem))] left-3 z-20">
+          <LivePill feeds={live} open={false} onToggle={() => setLiveOpen(true)} />
+        </div>
+      )}
+      {live && isMobile && liveOpen && (
+        <aside className="glass rise absolute inset-x-0 bottom-0 z-30 flex max-h-[65vh] flex-col rounded-t-3xl pb-[env(safe-area-inset-bottom)]" aria-label="Live Nashik">
+          <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink/15" />
+          <LiveCard feeds={live} onClose={() => setLiveOpen(false)} />
+        </aside>
       )}
       {sourcesOpen && <SourcesDialog data={data} onClose={() => setSourcesOpen(false)} />}
     </div>
   );
 }
 
-function MapMenu({ ctx, onClose, onNearby, onPin, onToast }: {
+function MapMenu({ ctx, onClose, onNearby, onPin, onToast, describe }: {
   ctx: { x: number; y: number; lngLat: LngLat };
   onClose: () => void;
   onNearby: () => void;
   onPin: () => void;
   onToast: (m: string) => void;
+  describe: (p: LngLat) => string;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -489,11 +594,16 @@ function MapMenu({ ctx, onClose, onNearby, onPin, onToast }: {
   const copy = async (text: string, done: string) => {
     try { await navigator.clipboard.writeText(text); onToast(done); } catch { onToast('Copying is not available here'); }
   };
+  const view = location.hash.slice(1).split('&').find((p) => p.startsWith('view='));
+  const url = `${location.origin}${location.pathname}#${[view, `pin=${coords.replace(' ', '')}`].filter(Boolean).join('&')}`;
   async function share() {
-    const view = location.hash.slice(1).split('&').find((p) => p.startsWith('view='));
-    const url = `${location.origin}${location.pathname}#${[view, `pin=${coords.replace(' ', '')}`].filter(Boolean).join('&')}`;
     if (navigator.share) { try { await navigator.share({ title: 'A spot in Nashik', url }); } catch { /* cancelled */ } }
     else copy(url, 'Link to this spot copied');
+  }
+  async function shareDirections() {
+    const text = describe(ctx.lngLat);
+    if (navigator.share) { try { await navigator.share({ title: 'How to find this spot', text, url }); } catch { /* cancelled */ } }
+    else copy(`${text}\n${url}`, 'Directions copied with link');
   }
   const item = (icon: IconName, label: string, run: () => void) => (
     <button role="menuitem" onClick={() => { onClose(); run(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13.5px] text-fg/90 hover:bg-ink/[0.05] focus-visible:bg-ink/[0.05] focus-visible:outline-none">
@@ -508,7 +618,8 @@ function MapMenu({ ctx, onClose, onNearby, onPin, onToast }: {
         <p className="px-3 pt-1.5 pb-1 font-mono text-[11px] text-muted">{coords}</p>
         {item('nearby', "What's nearby here", onNearby)}
         {item('pin', 'Drop a pin here', onPin)}
-        {item('share', 'Share this spot', share)}
+        {item('share', 'Share as directions', shareDirections)}
+        {item('external', 'Share link only', share)}
         {item('copy', 'Copy coordinates', () => copy(coords, 'Coordinates copied'))}
       </div>
     </>
@@ -534,7 +645,7 @@ function CtrlButton({ icon, label, onClick, children }: { icon?: IconName; label
   );
 }
 
-function MapControls({ map, hidden, raised, onToast, onNearby }: { map: MLMap; hidden: boolean; raised: boolean; onToast: (m: string) => void; onNearby: () => void }) {
+function MapControls({ map, hidden, raised, onToast, onNearby, onLegend, legendOpen }: { map: MLMap; hidden: boolean; raised: boolean; onToast: (m: string) => void; onNearby: () => void; onLegend: () => void; legendOpen: boolean }) {
   const [bearing, setBearing] = useState(0);
   const marker = useRef<maplibregl.Marker | null>(null);
   useEffect(() => {
@@ -575,6 +686,7 @@ function MapControls({ map, hidden, raised, onToast, onNearby }: { map: MLMap; h
         <CtrlButton icon="nearby" label="What's nearby" onClick={onNearby} />
         <CtrlButton icon="locate" label="Show my location" onClick={locate} />
         <CtrlButton icon="home" label="Reset view to Nashik" onClick={() => map.flyTo({ center: NASHIK_CENTER, zoom: 12.4, bearing: 0 })} />
+        <CtrlButton icon="legend" label={legendOpen ? 'Hide legend' : 'Show legend'} onClick={onLegend} />
       </div>
     </div>
   );
