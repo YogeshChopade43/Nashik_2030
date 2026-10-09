@@ -1,0 +1,82 @@
+{
+  "extracted_at": "2026-10-09T11:04:33.941Z",
+  "bbox": {
+    "south": 19.85,
+    "west": 73.5,
+    "north": 20.15,
+    "east": 74.05
+  },
+  "processing": [
+    "Overpass API query per dataset (raw responses in data/raw/, git-ignored)",
+    "Multipolygon/relation assembly via osmtogeojson",
+    "Classification into CityEntity types; unnamed POIs dropped except bus stops",
+    "Coordinates rounded to 5 decimals (~1 m); boundaries simplified with Douglas–Peucker (3e-4°)",
+    "Stable IDs derived from OSM element type + id"
+  ],
+  "unavailable": [
+    {
+      "layer": "Municipal wards (NMC)",
+      "reason": "No openly licensed ward boundary dataset found: absent from OpenStreetMap and DataMeet Municipal_Spatial_Data. Not fabricated."
+    },
+    {
+      "layer": "Bus routes",
+      "reason": "Not extracted in Sprint 1; OSM route relations for Nashik city buses are incomplete."
+    }
+  ],
+  "datasets": {
+    "places": {
+      "file": "data/places.geojson",
+      "description": "Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations",
+      "features": 564,
+      "source": "OpenStreetMap contributors via Overpass API",
+      "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
+      "osm_data_timestamp": "2026-10-09T10:58:21Z",
+      "overpass_query": "[out:json][timeout:180][bbox:19.85,73.5,20.15,74.05];\n(\n  nwr[amenity~\"^(hospital|school|college|university|marketplace|place_of_worship|townhall|courthouse|police|fire_station|post_office|bus_station)$\"];\n  nwr[healthcare=hospital];\n  nwr[shop=mall];\n  nwr[tourism~\"^(attraction|museum|viewpoint|zoo|theme_park|gallery)$\"];\n  nwr[historic~\"^(monument|memorial|fort|castle|archaeological_site|ruins)$\"];\n  nwr[office=government];\n  node[highway=bus_stop];\n  nwr[railway~\"^(station|halt)$\"];\n);\nout center meta;"
+    },
+    "roads": {
+      "file": "data/roads.geojson",
+      "description": "Named road segments (OSM ways), motorway through living_street",
+      "features": 1102,
+      "source": "OpenStreetMap contributors via Overpass API",
+      "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
+      "osm_data_timestamp": "2026-05-31T22:37:44Z",
+      "overpass_query": "[out:json][timeout:180][bbox:19.85,73.5,20.15,74.05];\nway[highway~\"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$\"][name];\nout meta geom;"
+    },
+    "parks": {
+      "file": "data/parks.geojson",
+      "description": "Parks and gardens (leisure=park|garden) as polygons",
+      "features": 115,
+      "source": "OpenStreetMap contributors via Overpass API",
+      "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
+      "osm_data_timestamp": "2026-10-09T11:00:21Z",
+      "overpass_query": "[out:json][timeout:180][bbox:19.85,73.5,20.15,74.05];\n(way[leisure~\"^(park|garden)$\"];rel[leisure~\"^(park|garden)$\"];);\nout meta geom;"
+    },
+    "water": {
+      "file": "data/water.geojson",
+      "description": "Named rivers, streams, canals, lakes and reservoirs",
+      "features": 66,
+      "source": "OpenStreetMap contributors via Overpass API",
+      "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
+      "osm_data_timestamp": "2026-10-09T11:01:21Z",
+      "overpass_query": "[out:json][timeout:180][bbox:19.85,73.5,20.15,74.05];\n(\n  way[waterway~\"^(river|stream|canal)$\"][name];\n  way[natural=water][name]; rel[natural=water][name];\n  way[landuse=reservoir][name]; rel[landuse=reservoir][name];\n);\nout meta geom;"
+    },
+    "localities": {
+      "file": "data/localities.geojson",
+      "description": "Settlement and locality points (place=city|town|suburb|neighbourhood|village|…)",
+      "features": 134,
+      "source": "OpenStreetMap contributors via Overpass API",
+      "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
+      "osm_data_timestamp": "2026-10-09T11:02:21Z",
+      "overpass_query": "[out:json][timeout:120][bbox:19.85,73.5,20.15,74.05];\nnode[place~\"^(city|town|suburb|neighbourhood|quarter|village|hamlet|locality)$\"];\nout meta;"
+    },
+    "boundaries": {
+      "file": "data/boundaries.geojson",
+      "description": "Taluka / sub-district administrative boundaries (admin_level=6), simplified ~30 m",
+      "features": 7,
+      "source": "OpenStreetMap contributors via Overpass API",
+      "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
+      "osm_data_timestamp": "2026-05-31T22:37:44Z",
+      "overpass_query": "[out:json][timeout:180];\nrel[boundary=administrative][admin_level=6](19.85,73.5,20.15,74.05);\nout meta geom;"
+    }
+  }
+}

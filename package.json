@@ -1,0 +1,30 @@
+{
+  "name": "nashik-2030",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "node --test src/lib/*.test.ts",
+    "data": "node scripts/fetch-osm.mjs"
+  },
+  "dependencies": {
+    "d3-delaunay": "^6.0.4",
+    "maplibre-gl": "^5.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/d3-delaunay": "^6.0.4",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "osmtogeojson": "^3.0.0-beta.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.8",
+    "vite": "^6.4.4"
+  }
+}
