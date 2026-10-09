@@ -8,6 +8,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import osmtogeojson from 'osmtogeojson';
+import { dedupePlaces } from '../src/lib/dedupe.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const RAW = path.join(ROOT, 'data/raw');
@@ -90,6 +91,7 @@ async function overpass(name, query) {
 }
 
 // ---------- classification ----------
+const JUNCTION_NAME = /chowk|chauk|circle|naka|phata|point|square|signal|stambh|corner|junction|चौक|सर्कल|नाका|फाटा/i;
 function placeType(t) {
   if (t.amenity === 'toilets') return 'toilets';
   if (t.amenity === 'drinking_water') return 'drinking_water';
@@ -206,13 +208,15 @@ const processors = {
         t = { ...t, name: /petrol|pump|fuel/i.test(brand) ? brand : `${brand} petrol pump` };
         el = { ...el, tags: t };
       }
+      // A roundabout's ring ways often carry the street's name ("Trimbak Road"), not the junction's: not a chowk.
+      if (el.type === 'way' && t.junction && !JUNCTION_NAME.test(t['name:en'] ?? t.name ?? '')) continue;
       // Unnamed bus stops, toilets and water points are still real infrastructure; other unnamed POIs are noise.
       if (!t.name && !t['name:en'] && !['bus_stop', 'toilets', 'drinking_water'].includes(type)) continue;
       const f = entity('place', type, el, { type: 'Point', coordinates: [lon, lat] });
       f.properties.category = categoryOf(type, t);
       out.push(f);
     }
-    return out;
+    return dedupePlaces(out);
   },
   roads(raw) {
     return raw.elements.filter((el) => el.geometry?.length > 1).map((el) => {
@@ -306,7 +310,8 @@ await fs.writeFile(metaPath, JSON.stringify({
   processing: [
     'Overpass API query per dataset (raw responses in data/raw/, git-ignored)',
     'Multipolygon/relation assembly via osmtogeojson',
-    'Classification into CityEntity types; unnamed POIs dropped except bus stops',
+    'Classification into CityEntity types; unnamed POIs dropped except bus stops; roundabout ways named after their street skipped',
+    'Duplicate places merged: same type, category and name within 50 m (e.g. a roundabout mapped as a node plus ring ways)',
     'Coordinates rounded to 5 decimals (~1 m); boundaries simplified with Douglas–Peucker (3e-4°)',
     'Stable IDs derived from OSM element type + id',
   ],

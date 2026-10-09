@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { LAYERS, glyphOf } from '../map/layers';
 import { C } from '../map/style';
 import { Icon, Mark } from './Icon';
+import { t } from '../lib/i18n';
 
 const Line = ({ color, casing, width = 4, dash }: { color: string; casing?: string; width?: number; dash?: string }) => (
   <svg viewBox="0 0 36 12" className="h-3 w-9 shrink-0" aria-hidden="true">
@@ -26,7 +27,7 @@ const Ring = ({ color }: { color: string }) => (
 );
 
 function Row({ swatch, label }: { swatch: ReactNode; label: string }) {
-  return <li className="flex items-center gap-2.5 py-[5px] text-[12.5px] text-fg/85">{swatch}<span className="min-w-0 truncate">{label}</span></li>;
+  return <li className="flex items-center gap-2.5 py-[5px] text-[12.5px] text-fg/85">{swatch}<span className="min-w-0 truncate">{t(label)}</span></li>;
 }
 
 export function Legend({ visible, onClose }: { visible: Record<string, boolean>; onClose: () => void }) {
@@ -58,17 +59,17 @@ export function Legend({ visible, onClose }: { visible: Record<string, boolean>;
   return (
     <div className="flex max-h-full min-h-0 flex-col">
       <div className="flex items-center justify-between px-4 pt-3.5 pb-1">
-        <h2 className="font-display text-[17px] font-semibold text-fg">Legend</h2>
-        <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:bg-ink/5 hover:text-fg" aria-label="Close legend"><Icon name="close" /></button>
+        <h2 className="font-display text-[17px] font-semibold text-fg">{t('Legend')}</h2>
+        <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:bg-ink/5 hover:text-fg" aria-label={t('Close legend')}><Icon name="close" /></button>
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 pb-3">
         {sections.filter(([, rows]) => rows.length).map(([title, rows]) => (
           <section key={title}>
-            <h3 className="pt-2.5 pb-0.5 text-[10px] font-semibold tracking-[0.18em] text-muted uppercase">{title}</h3>
+            <h3 className="pt-2.5 pb-0.5 text-[10px] font-semibold tracking-[0.18em] text-muted uppercase">{t(title)}</h3>
             <ul>{rows}</ul>
           </section>
         ))}
-        <p className="pt-2 text-[11px] text-muted/80">Only layers currently shown are listed.</p>
+        <p className="pt-2 text-[11px] text-muted/80">{t('Only layers currently shown are listed.')}</p>
       </div>
     </div>
   );

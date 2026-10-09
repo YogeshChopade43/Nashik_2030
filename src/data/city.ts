@@ -1,5 +1,7 @@
 import type { CityEntity, EntityType, Metadata } from '../types/entity';
 import { bbox, normalizeName, type BBox } from '../lib/geo';
+import { getLang, localName, marathiName, t } from '../lib/i18n';
+import { LAYER_BY_TYPE } from '../map/layers';
 
 const FILES = ['places', 'roads', 'parks', 'water', 'localities', 'boundaries'] as const;
 type FileName = (typeof FILES)[number];
@@ -22,7 +24,10 @@ export async function loadCity(): Promise<CityData> {
   const files = Object.fromEntries(FILES.map((f, i) => [f, collections[i].features])) as CityData['files'];
   const all = FILES.flatMap((f) => files[f]);
   const byType: CityData['byType'] = {};
-  for (const e of all) (byType[e.properties.type] ??= []).push(e);
+  for (const e of all) {
+    (byType[e.properties.type] ??= []).push(e);
+    e.properties.name_mr = marathiName(e.properties); // read by the Marathi map labels
+  }
   return { files, all, byId: new Map(all.map((e) => [e.properties.id, e])), byType, meta, search: buildIndex(all) };
 }
 
@@ -37,25 +42,25 @@ export const TYPE_LABEL: Record<EntityType, string> = {
 };
 
 /** Name to show; unnamed infrastructure (bus stops, toilets, water points) is labelled by its type. */
-export const displayName = (p: { name: string | null; type: EntityType }) =>
-  p.name ?? (['bus_stop', 'toilets', 'drinking_water'].includes(p.type) ? TYPE_LABEL[p.type] : `Unnamed ${TYPE_LABEL[p.type].toLowerCase()}`);
+export const displayName = (p: { name: string | null; name_local: string | null; tags: Record<string, string>; type: EntityType }) =>
+  localName(p) ?? (['bus_stop', 'toilets', 'drinking_water'].includes(p.type) ? t(TYPE_LABEL[p.type]) : t('Unnamed {type}', { type: t(TYPE_LABEL[p.type]).toLowerCase() }));
 
 /** Category keywords → layer id. Lets "hospitals" or "temples" search for a whole layer. */
 const CATEGORY_WORDS: Record<string, string[]> = {
-  hospital: ['hospital', 'hospitals', 'clinic', 'medical', 'health'],
-  school: ['school', 'schools'],
-  college: ['college', 'colleges', 'university', 'universities'],
-  market: ['market', 'markets', 'mall', 'malls', 'bazaar', 'shopping'],
-  park: ['park', 'parks', 'garden', 'gardens'],
-  religious: ['temple', 'temples', 'mandir', 'mosque', 'masjid', 'church', 'religious', 'worship'],
-  tourism: ['tourist', 'tourism', 'attraction', 'attractions', 'museum', 'landmark', 'landmarks', 'sightseeing'],
-  government: ['government', 'police', 'post office', 'court', 'fire station', 'office'],
-  bus_stop: ['bus', 'bus stop', 'bus stops', 'bus station', 'transit'],
-  railway_station: ['railway', 'railway station', 'train', 'station'],
-  landmark: ['landmark', 'landmarks', 'chowk', 'circle', 'naka', 'signal', 'petrol pump', 'petrol', 'bank', 'atm', 'pharmacy', 'medical store'],
-  toilets: ['toilet', 'toilets', 'washroom', 'restroom', 'public toilet', 'urinal'],
-  drinking_water: ['drinking water', 'water point', 'water tap'],
-  locality: ['locality', 'localities', 'neighbourhood', 'neighborhood', 'area'],
+  hospital: ['hospital', 'hospitals', 'clinic', 'medical', 'health', 'रुग्णालय', 'दवाखाना', 'हॉस्पिटल'],
+  school: ['school', 'schools', 'शाळा'],
+  college: ['college', 'colleges', 'university', 'universities', 'महाविद्यालय', 'कॉलेज', 'विद्यापीठ'],
+  market: ['market', 'markets', 'mall', 'malls', 'bazaar', 'shopping', 'बाजार', 'मंडई', 'मॉल'],
+  park: ['park', 'parks', 'garden', 'gardens', 'उद्यान', 'बाग'],
+  religious: ['temple', 'temples', 'mandir', 'mosque', 'masjid', 'church', 'religious', 'worship', 'मंदिर', 'देऊळ', 'मशीद', 'चर्च', 'गुरुद्वारा'],
+  tourism: ['tourist', 'tourism', 'attraction', 'attractions', 'museum', 'landmark', 'landmarks', 'sightseeing', 'पर्यटन', 'संग्रहालय', 'किल्ला'],
+  government: ['government', 'police', 'post office', 'court', 'fire station', 'office', 'सरकारी', 'पोलीस', 'पोस्ट', 'न्यायालय', 'कार्यालय'],
+  bus_stop: ['bus', 'bus stop', 'bus stops', 'bus station', 'transit', 'बस', 'बस थांबा', 'बस स्थानक'],
+  railway_station: ['railway', 'railway station', 'train', 'station', 'रेल्वे', 'रेल्वे स्थानक', 'स्टेशन'],
+  landmark: ['landmark', 'landmarks', 'chowk', 'circle', 'naka', 'signal', 'petrol pump', 'petrol', 'bank', 'atm', 'pharmacy', 'medical store', 'चौक', 'नाका', 'पेट्रोल पंप', 'बँक', 'एटीएम', 'मेडिकल'],
+  toilets: ['toilet', 'toilets', 'washroom', 'restroom', 'public toilet', 'urinal', 'शौचालय', 'स्वच्छतागृह', 'मुतारी'],
+  drinking_water: ['drinking water', 'water point', 'water tap', 'पिण्याचे पाणी', 'पाणपोई'],
+  locality: ['locality', 'localities', 'neighbourhood', 'neighborhood', 'area', 'परिसर'],
 };
 
 export type SearchItem =
@@ -103,6 +108,18 @@ function buildIndex(all: CityEntity[]): SearchItem[] {
   return items;
 }
 
+/** Result title and subtitle in the current language (the index itself is built once, in English). */
+export function itemText(item: SearchItem, count: (type: EntityType) => number): { label: string; sub: string } {
+  if (getLang() !== 'mr') return { label: item.label, sub: item.sub };
+  if (item.kind === 'category') return { label: t('All {layer}', { layer: t(LAYER_BY_TYPE[item.type]?.label ?? TYPE_LABEL[item.type]) }), sub: t('{n} mapped in OpenStreetMap · show layer', { n: count(item.type) }) };
+  if (item.kind === 'road') {
+    const p = item.segments.map((s) => s.properties).find((p) => marathiName(p)) ?? item.segments[0].properties;
+    return { label: marathiName(p) ?? item.label, sub: t('Road · {cls} · {n} segments', { cls: item.segments[0].properties.category?.replace(/_/g, ' ') ?? '', n: item.segments.length }) };
+  }
+  const p = item.entity.properties;
+  return { label: localName(p) ?? item.label, sub: [t(TYPE_LABEL[p.type]), p.category && p.category !== p.type ? p.category : null].filter(Boolean).join(' · ') };
+}
+
 /** Deterministic prefix/substring ranking over real entity names. */
 export function search(index: SearchItem[], query: string, limit = 8): SearchItem[] {
   const q = normalizeName(query);
@@ -122,8 +139,9 @@ export function search(index: SearchItem[], query: string, limit = 8): SearchIte
 
 /** Free-text fallback via OSM Nominatim, bounded to the Nashik extract. Only on explicit submit (Nominatim policy: no autocomplete). */
 export async function nominatim(query: string, b: Metadata['bbox']) {
+  // accept-language: Nominatim returns name:mr where OSM has it.
   const url = new URL('https://nominatim.openstreetmap.org/search');
-  url.search = new URLSearchParams({ q: query, format: 'jsonv2', limit: '5', bounded: '1', viewbox: `${b.west},${b.north},${b.east},${b.south}` }).toString();
+  url.search = new URLSearchParams({ q: query, format: 'jsonv2', limit: '5', bounded: '1', 'accept-language': getLang() === 'mr' ? 'mr,en' : 'en', viewbox: `${b.west},${b.north},${b.east},${b.south}` }).toString();
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Nominatim ${res.status}`);
   const rows: { osm_type: string; osm_id: number; display_name: string; name: string; lat: string; lon: string; type: string; category: string }[] = await res.json();

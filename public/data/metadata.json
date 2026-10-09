@@ -9,7 +9,8 @@
   "processing": [
     "Overpass API query per dataset (raw responses in data/raw/, git-ignored)",
     "Multipolygon/relation assembly via osmtogeojson",
-    "Classification into CityEntity types; unnamed POIs dropped except bus stops",
+    "Classification into CityEntity types; unnamed POIs dropped except bus stops; roundabout ways named after their street skipped",
+    "Duplicate places merged: same type, category and name within 50 m (e.g. a roundabout mapped as a node plus ring ways)",
     "Coordinates rounded to 5 decimals (~1 m); boundaries simplified with Douglas–Peucker (3e-4°)",
     "Stable IDs derived from OSM element type + id"
   ],
@@ -28,7 +29,7 @@
       "file": "data/places.geojson",
       "fetched_at": "2026-10-09T17:06:00.058Z",
       "description": "Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations, public toilets, drinking water, and local landmarks (named chowks/nakas/circles/signals, petrol pumps, banks, pharmacies, cinemas, water tanks)",
-      "features": 702,
+      "features": 695,
       "source": "OpenStreetMap contributors via Overpass API",
       "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
       "osm_data_timestamp": "2026-10-09T17:04:51Z",

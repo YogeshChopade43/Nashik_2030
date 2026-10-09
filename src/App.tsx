@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl, { type FilterSpecification, type GeoJSONSource, type Map as MLMap, type PaddingOptions } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { loadCity, type CityData, type NominatimHit, type SearchItem } from './data/city';
+import { itemText, loadCity, type CityData, type NominatimHit, type SearchItem } from './data/city';
+import { setLang, t, type Lang } from './lib/i18n';
+import { applyMapLang } from './map/lang';
 import { bbox, circle, distance, roadSegmentsByName, type LngLat } from './lib/geo';
 import { localityZones } from './lib/zones';
 import { describePoint } from './lib/address';
@@ -22,6 +24,7 @@ import { SearchBar } from './components/SearchBar';
 
 const STORAGE_KEY = 'n2030.layers.v1';
 const FILTER_KEY = 'n2030.filters.v1';
+const LANG_KEY = 'n2030.lang';
 const DEFAULT_VISIBLE = Object.fromEntries(LAYERS.map((l) => [l.id, l.defaultVisible]));
 const EMPTY = { type: 'FeatureCollection' as const, features: [] };
 const REGION: [[number, number], [number, number]] = [[72.9, 19.4], [74.7, 20.6]];
@@ -45,6 +48,15 @@ function loadVisible(): Record<string, boolean> {
 function loadFilters(): Record<string, string[]> {
   try { return JSON.parse(localStorage.getItem(FILTER_KEY) ?? '{}'); }
   catch { return {}; }
+}
+
+/** Saved choice, else Marathi for Marathi-language browsers. */
+function loadLang(): Lang {
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(LANG_KEY); } catch { /* storage unavailable */ }
+  const l: Lang = saved === 'mr' || saved === 'en' ? saved : navigator.language.toLowerCase().startsWith('mr') ? 'mr' : 'en';
+  setLang(l);
+  return l;
 }
 
 let pmtilesRegistered = false;
@@ -82,6 +94,7 @@ export default function App() {
   const [live, setLive] = useState<LiveFeeds | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [lang, setLangState] = useState(loadLang);
   const restored = useRef(false);
   const [ctx, setCtx] = useState<{ x: number; y: number; lngLat: LngLat } | null>(null);
   const ctxRef = useRef(ctx);
@@ -122,7 +135,7 @@ export default function App() {
       });
       if (import.meta.env.DEV) Object.assign(window, { map }); // debugging aid
     })();
-    loadCity().then(setData).catch((e) => setToast(`Could not load city data: ${e.message}`));
+    loadCity().then(setData).catch((e) => setToast(t('Could not load city data: {msg}', { msg: e.message })));
     return () => {
       cancelled = true;
       // map.remove() strips the URL hash; keep the deep link across StrictMode/HMR remounts.
@@ -198,6 +211,17 @@ export default function App() {
     if (map) for (const def of LAYERS) setLayerVisibility(map, def, !def.unavailable && !!visible[def.id]);
   }, [map, visible, installed]);
 
+  function switchLang() {
+    const next: Lang = lang === 'mr' ? 'en' : 'mr';
+    setLang(next);
+    setLangState(next);
+    try { localStorage.setItem(LANG_KEY, next); } catch { /* storage unavailable */ }
+  }
+
+  useEffect(() => {
+    if (map && data && installed) applyMapLang(map, data, lang);
+  }, [map, data, installed, lang]);
+
   useEffect(() => {
     if (!map || !installed) return;
     const src = map.getSource<GeoJSONSource>('selection');
@@ -251,7 +275,7 @@ export default function App() {
     else if (pin?.length === 2 && pin.every(Number.isFinite) && inRegion([pin[1], pin[0]])) {
       setSelection({ kind: 'location', lngLat: [pin[1], pin[0]] });
       if (!hasView) map?.jumpTo({ center: [pin[1], pin[0]], zoom: 16 });
-    } else if (id) setToast('That shared place is no longer in the map data');
+    } else if (id) setToast(t('That shared place is no longer in the map data'));
   }, [installed, data, map]);
 
   // ---- nearby ----
@@ -269,18 +293,18 @@ export default function App() {
 
   function nearbyHere() {
     if (!map) return;
-    const centre = () => { const c = map.getCenter(); openNearby([c.lng, c.lat], 'Around map centre'); };
+    const centre = () => { const c = map.getCenter(); openNearby([c.lng, c.lat], t('Around map centre')); };
     if (!navigator.geolocation) return centre();
     // The browser's own timeout only starts after permission is granted, so guard an unanswered prompt.
     let settled = false;
     const settle = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(fallback); fn(); } };
     const fallback = setTimeout(() => settle(centre), 7000);
-    setToast('Finding your location…');
+    setToast(t('Finding your location…'));
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => settle(() => {
         const p: LngLat = [coords.longitude, coords.latitude];
-        if (inRegion(p)) { setToast(null); openNearby(p, 'Around you'); }
-        else { setToast('You are outside Nashik — showing around the map centre'); centre(); }
+        if (inRegion(p)) { setToast(null); openNearby(p, t('Around you')); }
+        else { setToast(t('You are outside Nashik — showing around the map centre')); centre(); }
       }),
       () => settle(() => { setToast(null); centre(); }),
       { enableHighAccuracy: true, timeout: 6000, maximumAge: 60_000 },
@@ -330,12 +354,12 @@ export default function App() {
         });
         return new maplibregl.Marker({ element: el });
       };
-      const c = handle('nearby-handle', 'Drag to move the search', 'c', (p) => {
+      const c = handle('nearby-handle', t('Drag to move the search'), 'c', (p) => {
         const n = nearRef.current; if (!n) return;
         c.setLngLat(p); e.setLngLat(edgeOf(p, n.radius));
-        setNear({ origin: { point: p, label: 'Around this point' }, radius: n.radius });
+        setNear({ origin: { point: p, label: t('Around this point') }, radius: n.radius });
       }, () => {});
-      const e = handle('nearby-handle nearby-handle-edge', 'Drag to resize the search', 'e', (p) => {
+      const e = handle('nearby-handle nearby-handle-edge', t('Drag to resize the search'), 'e', (p) => {
         const n = nearRef.current; if (!n) return;
         e.setLngLat(p);
         const d = Math.min(5000, Math.max(100, distance(n.origin.point, p)));
@@ -419,7 +443,7 @@ export default function App() {
       setVisible((v) => ({ ...v, [item.layer]: true }));
       setSelection(null);
       map.fitBounds(bbox((data.byType[item.type] ?? []).map((e) => e.geometry)) as [number, number, number, number], { padding: padding(), duration: 1400 });
-      setToast(`Showing ${item.label.replace(/^All /, '')} layer`);
+      setToast(t('Showing {layer} layer', { layer: itemText(item, (type) => data.byType[type]?.length ?? 0).label.replace(/^(All|सर्व) /, '') }));
     }
   }
 
@@ -435,7 +459,7 @@ export default function App() {
   return (
     <div className="relative h-full w-full overflow-hidden">
       {/* inline style: maplibre-gl.css (unlayered) would override Tailwind's layered `absolute` */}
-      <div ref={container} style={{ position: 'absolute', inset: 0 }} aria-label="Interactive map of Nashik" />
+      <div ref={container} style={{ position: 'absolute', inset: 0 }} aria-label={t('Interactive map of Nashik')} />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-paper/70 to-transparent" />
 
       {/* Top bar */}
@@ -444,17 +468,26 @@ export default function App() {
           <Logo />
           <div className="hidden leading-none sm:block">
             <div className="font-display text-[19px] font-semibold tracking-[-0.01em] text-fg">Nashik <span className="text-saffron italic">2030</span></div>
-            <div className="mt-1 text-[9px] font-semibold tracking-[0.32em] text-muted uppercase">City atlas · digital twin</div>
+            <div className="mt-1 text-[9px] font-semibold tracking-[0.32em] text-muted uppercase">{t('City atlas · digital twin')}</div>
           </div>
         </div>
         <div className="pointer-events-auto min-w-0 flex-1 md:max-w-[440px] md:flex-none md:basis-[440px]">
           <SearchBar data={data} onPick={onPick} onPickNominatim={onPickNominatim} />
         </div>
+        <button
+          onClick={switchLang}
+          lang={lang === 'mr' ? 'en' : 'mr'}
+          aria-label={lang === 'mr' ? t('Switch to English') : t('Switch to Marathi')}
+          title={lang === 'mr' ? t('Switch to English') : t('Switch to Marathi')}
+          className="glass pointer-events-auto order-last flex h-12 shrink-0 items-center rounded-2xl px-3.5 text-[14px] font-semibold text-fg hover:border-accent/30 md:ml-auto"
+        >
+          {lang === 'mr' ? 'EN' : 'मराठी'}
+        </button>
         {live && !isMobile && (
           <div className="pointer-events-auto relative">
             <LivePill feeds={live} open={liveOpen} onToggle={() => setLiveOpen((o) => !o)} />
             {liveOpen && (
-              <aside className="glass rise absolute top-14 left-0 z-30 flex max-h-[calc(100vh-110px)] w-[340px] flex-col rounded-2xl" aria-label="Live Nashik">
+              <aside className="glass rise absolute top-14 left-0 z-30 flex max-h-[calc(100vh-110px)] w-[340px] flex-col rounded-2xl" aria-label={t('Live Nashik')}>
                 <LiveCard feeds={live} onClose={() => setLiveOpen(false)} />
               </aside>
             )}
@@ -482,13 +515,13 @@ export default function App() {
           className="glass absolute z-20 flex h-11 items-center gap-2 rounded-2xl px-4 text-[13.5px] font-medium text-fg hover:border-accent/30 max-md:bottom-[max(1rem,env(safe-area-inset-bottom))] max-md:left-3 md:top-[84px] md:left-4"
           style={isMobile && panelOpen ? { display: 'none' } : undefined}
         >
-          <Icon name="layers" /> Layers
+          <Icon name="layers" /> {t('Layers')}
         </button>
       )}
 
       {/* Inspector: right panel on desktop, bottom sheet on mobile */}
       {selection && data && (
-        <aside key={selection.kind === 'entity' ? selection.entity.properties.id : selection.lngLat.join()} className="glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[55vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:top-[84px] md:right-4 md:max-h-[calc(100%-124px)] md:w-[380px] md:rounded-2xl" aria-label="Feature details">
+        <aside key={selection.kind === 'entity' ? selection.entity.properties.id : selection.lngLat.join()} className="glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[55vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:top-[84px] md:right-4 md:max-h-[calc(100%-124px)] md:w-[380px] md:rounded-2xl" aria-label={t('Feature details')}>
           <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink/15 md:hidden" />
           <Inspector
             selection={selection}
@@ -502,7 +535,7 @@ export default function App() {
         </aside>
       )}
       {!selection && near && data && (
-        <aside key="nearby" className="glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[60vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:top-[84px] md:right-4 md:max-h-[calc(100%-124px)] md:w-[380px] md:rounded-2xl" aria-label="Nearby places">
+        <aside key="nearby" className="glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[60vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:top-[84px] md:right-4 md:max-h-[calc(100%-124px)] md:w-[380px] md:rounded-2xl" aria-label={t('Nearby places')}>
           <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink/15 md:hidden" />
           <Nearby
             origin={near.origin}
@@ -519,7 +552,7 @@ export default function App() {
       {legendOpen && (
         <aside
           className={`glass rise absolute z-20 flex flex-col max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[55vh] max-md:rounded-t-3xl max-md:pb-[env(safe-area-inset-bottom)] md:bottom-10 md:max-h-[calc(100%-160px)] md:w-[260px] md:rounded-2xl ${panelOpen ? 'md:right-[468px]' : 'md:right-[72px]'}`}
-          aria-label="Map legend"
+          aria-label={t('Map legend')}
         >
           <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink/15 md:hidden" />
           <Legend visible={visible} onClose={() => setLegendOpen(false)} />
@@ -529,7 +562,7 @@ export default function App() {
 
       {!data && !toast && (
         <div className="glass absolute top-[84px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-full px-4 py-2 text-[12.5px] text-muted max-md:top-[72px]">
-          <span className="size-3 animate-spin rounded-full border-2 border-accent/25 border-t-accent" /> Loading Nashik city data…
+          <span className="size-3 animate-spin rounded-full border-2 border-accent/25 border-t-accent" /> {t('Loading Nashik city data…')}
         </div>
       )}
       {toast && (
@@ -541,7 +574,7 @@ export default function App() {
         <MapMenu
           ctx={ctx}
           onClose={() => setCtx(null)}
-          onNearby={() => openNearby(ctx.lngLat, 'Around this point')}
+          onNearby={() => openNearby(ctx.lngLat, t('Around this point'))}
           onPin={() => {
             const pt = map.project(ctx.lngLat);
             const base = map.queryRenderedFeatures(pt).find((x) => x.source === 'omt');
@@ -563,7 +596,7 @@ export default function App() {
         </div>
       )}
       {live && isMobile && liveOpen && (
-        <aside className="glass rise absolute inset-x-0 bottom-0 z-30 flex max-h-[65vh] flex-col rounded-t-3xl pb-[env(safe-area-inset-bottom)]" aria-label="Live Nashik">
+        <aside className="glass rise absolute inset-x-0 bottom-0 z-30 flex max-h-[65vh] flex-col rounded-t-3xl pb-[env(safe-area-inset-bottom)]" aria-label={t('Live Nashik')}>
           <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-ink/15" />
           <LiveCard feeds={live} onClose={() => setLiveOpen(false)} />
         </aside>
@@ -592,18 +625,18 @@ function MapMenu({ ctx, onClose, onNearby, onPin, onToast, describe }: {
   const [lng, lat] = ctx.lngLat;
   const coords = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   const copy = async (text: string, done: string) => {
-    try { await navigator.clipboard.writeText(text); onToast(done); } catch { onToast('Copying is not available here'); }
+    try { await navigator.clipboard.writeText(text); onToast(done); } catch { onToast(t('Copying is not available here')); }
   };
   const view = location.hash.slice(1).split('&').find((p) => p.startsWith('view='));
   const url = `${location.origin}${location.pathname}#${[view, `pin=${coords.replace(' ', '')}`].filter(Boolean).join('&')}`;
   async function share() {
-    if (navigator.share) { try { await navigator.share({ title: 'A spot in Nashik', url }); } catch { /* cancelled */ } }
-    else copy(url, 'Link to this spot copied');
+    if (navigator.share) { try { await navigator.share({ title: t('A spot in Nashik'), url }); } catch { /* cancelled */ } }
+    else copy(url, t('Link to this spot copied'));
   }
   async function shareDirections() {
     const text = describe(ctx.lngLat);
-    if (navigator.share) { try { await navigator.share({ title: 'How to find this spot', text, url }); } catch { /* cancelled */ } }
-    else copy(`${text}\n${url}`, 'Directions copied with link');
+    if (navigator.share) { try { await navigator.share({ title: t('How to find this spot'), text, url }); } catch { /* cancelled */ } }
+    else copy(`${text}\n${url}`, t('Directions copied with link'));
   }
   const item = (icon: IconName, label: string, run: () => void) => (
     <button role="menuitem" onClick={() => { onClose(); run(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13.5px] text-fg/90 hover:bg-ink/[0.05] focus-visible:bg-ink/[0.05] focus-visible:outline-none">
@@ -614,27 +647,20 @@ function MapMenu({ ctx, onClose, onNearby, onPin, onToast, describe }: {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={dismiss} onContextMenu={(e) => { e.preventDefault(); onClose(); }} />
-      <div role="menu" aria-label={`Actions for ${coords}`} className="glass rise fixed z-50 w-[220px] rounded-xl p-1" style={{ left: x, top: y }}>
+      <div role="menu" aria-label={t('Actions for {coords}', { coords })} className="glass rise fixed z-50 w-[220px] rounded-xl p-1" style={{ left: x, top: y }}>
         <p className="px-3 pt-1.5 pb-1 font-mono text-[11px] text-muted">{coords}</p>
-        {item('nearby', "What's nearby here", onNearby)}
-        {item('pin', 'Drop a pin here', onPin)}
-        {item('share', 'Share as directions', shareDirections)}
-        {item('external', 'Share link only', share)}
-        {item('copy', 'Copy coordinates', () => copy(coords, 'Coordinates copied'))}
+        {item('nearby', t("What's nearby here"), onNearby)}
+        {item('pin', t('Drop a pin here'), onPin)}
+        {item('share', t('Share as directions'), shareDirections)}
+        {item('external', t('Share link only'), share)}
+        {item('copy', t('Copy coordinates'), () => copy(coords, t('Coordinates copied')))}
       </div>
     </>
   );
 }
 
 function Logo() {
-  return (
-    <svg viewBox="0 0 32 32" className="size-7 shrink-0" aria-hidden="true">
-      <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill="#fffdf8" stroke="#d9cfbe" />
-      <path d="M5 21.5c5-1 7-6.5 11-6.5s5.5 4.5 11 3.5" fill="none" stroke="#3f86b0" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M5 25.5c5-.8 7-4 11-4s5.5 3 11 2.2" fill="none" stroke="#3f86b0" strokeOpacity="0.45" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="16" cy="9.5" r="3.2" fill="#c26d12" />
-    </svg>
-  );
+  return <img src={`${import.meta.env.BASE_URL}logo-192.png`} alt="" width={36} height={36} className="size-9 shrink-0" />;
 }
 
 function CtrlButton({ icon, label, onClick, children }: { icon?: IconName; label: string; onClick: () => void; children?: React.ReactNode }) {
@@ -655,17 +681,17 @@ function MapControls({ map, hidden, raised, onToast, onNearby, onLegend, legendO
   }, [map]);
 
   function locate() {
-    if (!navigator.geolocation) return onToast('Geolocation is not supported by this browser');
+    if (!navigator.geolocation) return onToast(t('Geolocation is not supported by this browser'));
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const p: LngLat = [coords.longitude, coords.latitude];
-        if (!inRegion(p)) return onToast('You are outside the Nashik coverage area');
+        if (!inRegion(p)) return onToast(t('You are outside the Nashik coverage area'));
         const el = document.createElement('div'); el.className = 'locate-dot';
         marker.current?.remove();
         marker.current = new maplibregl.Marker({ element: el }).setLngLat(p).addTo(map);
         map.flyTo({ center: p, zoom: Math.max(map.getZoom(), 15.5) });
       },
-      () => onToast('Location permission denied or unavailable'),
+      () => onToast(t('Location permission denied or unavailable')),
       { enableHighAccuracy: true, timeout: 10_000 },
     );
   }
@@ -674,19 +700,19 @@ function MapControls({ map, hidden, raised, onToast, onNearby, onLegend, legendO
   return (
     <div className={`absolute right-3 z-20 flex flex-col gap-2 md:right-4 ${raised ? 'md:right-[412px]' : ''} bottom-[max(2.5rem,calc(env(safe-area-inset-bottom)+1rem))]`}>
       <div className="glass flex flex-col divide-y divide-ink/[0.07] overflow-hidden rounded-2xl">
-        <CtrlButton icon="plus" label="Zoom in" onClick={() => map.zoomIn()} />
-        <CtrlButton icon="minus" label="Zoom out" onClick={() => map.zoomOut()} />
+        <CtrlButton icon="plus" label={t('Zoom in')} onClick={() => map.zoomIn()} />
+        <CtrlButton icon="minus" label={t('Zoom out')} onClick={() => map.zoomOut()} />
       </div>
       <div className="glass flex flex-col divide-y divide-ink/[0.07] overflow-hidden rounded-2xl">
-        <CtrlButton label="Reset bearing to north" onClick={() => map.resetNorth()}>
+        <CtrlButton label={t('Reset bearing to north')} onClick={() => map.resetNorth()}>
           <svg viewBox="0 0 24 24" className="size-5" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden="true">
             <path d="M12 3l3.5 9h-7z" fill="#b8402f" /><path d="M12 21l-3.5-9h7z" fill="currentColor" opacity="0.35" />
           </svg>
         </CtrlButton>
-        <CtrlButton icon="nearby" label="What's nearby" onClick={onNearby} />
-        <CtrlButton icon="locate" label="Show my location" onClick={locate} />
-        <CtrlButton icon="home" label="Reset view to Nashik" onClick={() => map.flyTo({ center: NASHIK_CENTER, zoom: 12.4, bearing: 0 })} />
-        <CtrlButton icon="legend" label={legendOpen ? 'Hide legend' : 'Show legend'} onClick={onLegend} />
+        <CtrlButton icon="nearby" label={t("What's nearby")} onClick={onNearby} />
+        <CtrlButton icon="locate" label={t('Show my location')} onClick={locate} />
+        <CtrlButton icon="home" label={t('Reset view to Nashik')} onClick={() => map.flyTo({ center: NASHIK_CENTER, zoom: 12.4, bearing: 0 })} />
+        <CtrlButton icon="legend" label={legendOpen ? t('Hide legend') : t('Show legend')} onClick={onLegend} />
       </div>
     </div>
   );

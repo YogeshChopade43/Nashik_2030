@@ -37,6 +37,8 @@ export interface EntityProps {
   name: string | null;
   /** Name in the local script (Marathi/Devanagari) when distinct from `name`. */
   name_local: string | null;
+  /** Marathi name from OSM (`name:mr`, else a Devanagari `name_local`); derived at load, see lib/i18n. */
+  name_mr?: string | null;
   category: string | null;
   source: 'openstreetmap';
   /** Source-native ID, e.g. `node/1671916246`. */

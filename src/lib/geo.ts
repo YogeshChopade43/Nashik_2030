@@ -2,6 +2,7 @@
 // city entities, so Sprint 2 agents (and the UI today) get reproducible answers.
 import type { Geometry, Position } from 'geojson';
 import type { CityEntity, EntityType } from '../types/entity.ts';
+import { t } from './i18n.ts';
 
 export type LngLat = [number, number];
 /** [west, south, east, north] */
@@ -180,7 +181,7 @@ export function reverseGeocode(p: LngLat, d: { roads: CityEntity[]; localities: 
 }
 
 export function formatDistance(m: number): string {
-  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(m < 10_000 ? 1 : 0)} km`;
+  return m < 1000 ? t('{n} m', { n: Math.round(m) }) : t('{n} km', { n: (m / 1000).toFixed(m < 10_000 ? 1 : 0) });
 }
 
 /** Initial great-circle bearing from a to b, degrees clockwise from north [0, 360). */

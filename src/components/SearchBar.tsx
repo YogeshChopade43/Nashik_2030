@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { nominatim, search, type CityData, type NominatimHit, type SearchItem } from '../data/city';
+import { itemText, nominatim, search, type CityData, type NominatimHit, type SearchItem } from '../data/city';
+import { getLang, t } from '../lib/i18n';
 import { LAYER_BY_TYPE, glyphOf } from '../map/layers';
 import { Icon, Mark } from './Icon';
 
@@ -7,6 +8,7 @@ type Result = { kind: 'local'; item: SearchItem } | { kind: 'nominatim'; hit: No
 
 // Real names verified to exist in the OSM extract.
 const SUGGESTIONS = ['Panchavati', 'College Road', 'Gangapur Road', 'Nashik Road', 'Ramkund', 'Hospitals'];
+const SUGGESTIONS_MR = ['नाशिक रोड', 'त्र्यंबकेश्वर', 'गोदावरी', 'सातपूर', 'रुग्णालय', 'शौचालय'];
 
 const typeOf = (item: SearchItem) => (item.kind === 'entity' ? item.entity.properties.type : item.kind === 'road' ? 'road_segment' : item.type);
 const colorOf = (item: SearchItem) => LAYER_BY_TYPE[typeOf(item)]?.color ?? '#8a8072';
@@ -38,8 +40,10 @@ export function SearchBar({ data, onPick, onPickNominatim }: {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const text = (item: SearchItem) => itemText(item, (type) => data?.byType[type]?.length ?? 0);
+
   function choose(r: Result) {
-    if (r.kind === 'local') { onPick(r.item); setQ(r.item.label); }
+    if (r.kind === 'local') { onPick(r.item); setQ(text(r.item).label); }
     else { onPickNominatim(r.hit); setQ(r.hit.label); }
     setOpen(false);
     input.current?.blur();
@@ -75,15 +79,15 @@ export function SearchBar({ data, onPick, onPickNominatim }: {
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={onKeyDown}
-          placeholder={data ? 'Search Nashik…' : 'Loading city data…'}
+          placeholder={data ? t('Search Nashik…') : t('Loading city data…')}
           className="min-w-0 flex-1 bg-transparent text-[15px] text-fg placeholder:text-muted focus:outline-none"
           role="combobox"
           aria-expanded={showPanel}
           aria-controls="search-results"
-          aria-label="Search Nashik"
+          aria-label={t('Search Nashik')}
         />
         {q ? (
-          <button onClick={() => { setQ(''); input.current?.focus(); }} className="rounded-md p-1 text-muted hover:text-fg" aria-label="Clear search">
+          <button onClick={() => { setQ(''); input.current?.focus(); }} className="rounded-md p-1 text-muted hover:text-fg" aria-label={t('Clear search')}>
             <Icon name="close" />
           </button>
         ) : (
@@ -95,9 +99,9 @@ export function SearchBar({ data, onPick, onPickNominatim }: {
         <div id="search-results" role="listbox" className="glass scroll-thin absolute inset-x-0 top-14 z-30 max-h-[60vh] overflow-y-auto rounded-2xl p-1.5">
           {q.length < 2 ? (
             <div className="p-3">
-              <p className="mb-2.5 text-[11px] font-medium tracking-[0.14em] text-muted uppercase">Try</p>
+              <p className="mb-2.5 text-[11px] font-medium tracking-[0.14em] text-muted uppercase">{t('Try')}</p>
               <div className="flex flex-wrap gap-1.5">
-                {SUGGESTIONS.map((s) => (
+                {(getLang() === 'mr' ? SUGGESTIONS_MR : SUGGESTIONS).map((s) => (
                   <button key={s} onMouseDown={(e) => e.preventDefault()} onClick={() => setQ(s)} className="rounded-full border border-line bg-ink/[0.03] px-3 py-1 text-[13px] text-fg/90 hover:border-accent/30 hover:bg-accent/[0.06]">
                     {s}
                   </button>
@@ -107,8 +111,7 @@ export function SearchBar({ data, onPick, onPickNominatim }: {
           ) : (
             <>
               {results.map((r, i) => {
-                const label = r.kind === 'local' ? r.item.label : r.hit.label;
-                const sub = r.kind === 'local' ? r.item.sub : `Nominatim · ${r.hit.kind}`;
+                const { label, sub } = r.kind === 'local' ? text(r.item) : { label: r.hit.label, sub: `Nominatim · ${r.hit.kind}` };
                 return (
                   <button
                     key={r.kind === 'local' ? r.item.label + r.item.sub + i : r.hit.source_id}
@@ -135,14 +138,14 @@ export function SearchBar({ data, onPick, onPickNominatim }: {
               })}
               {local.length === 0 && remote?.q !== q && (
                 <div className="px-3 py-3 text-[13px] text-muted">
-                  No match in the Nashik extract.{' '}
-                  <button onMouseDown={(e) => e.preventDefault()} onClick={lookupRemote} className="text-accent hover:underline">Search OpenStreetMap (Nominatim)</button>
+                  {t('No match in the Nashik extract.')}{' '}
+                  <button onMouseDown={(e) => e.preventDefault()} onClick={lookupRemote} className="text-accent hover:underline">{t('Search OpenStreetMap (Nominatim)')}</button>
                 </div>
               )}
-              {remote?.q === q && remote.hits === 'loading' && <div className="px-3 py-3 text-[13px] text-muted">Searching OpenStreetMap…</div>}
-              {remote?.q === q && remote.hits === 'error' && <div className="px-3 py-3 text-[13px] text-rose-700">Nominatim is unreachable right now.</div>}
+              {remote?.q === q && remote.hits === 'loading' && <div className="px-3 py-3 text-[13px] text-muted">{t('Searching OpenStreetMap…')}</div>}
+              {remote?.q === q && remote.hits === 'error' && <div className="px-3 py-3 text-[13px] text-rose-700">{t('Nominatim is unreachable right now.')}</div>}
               {remote?.q === q && Array.isArray(remote.hits) && results.length === 0 && (
-                <div className="px-3 py-3 text-[13px] text-muted">Nothing named “{q}” exists in OpenStreetMap within Nashik.</div>
+                <div className="px-3 py-3 text-[13px] text-muted">{t('Nothing named “{q}” exists in OpenStreetMap within Nashik.', { q })}</div>
               )}
             </>
           )}

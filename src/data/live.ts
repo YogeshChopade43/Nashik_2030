@@ -2,6 +2,8 @@
 // A feed is `ok`, `stale` (past valid_until by more than one update interval) or `missing`;
 // malformed files count as missing, so nothing questionable is ever shown as current.
 
+import { t } from '../lib/i18n.ts';
+
 export type FeedName = 'weather' | 'river' | 'imd';
 
 export interface Envelope<T> {
@@ -66,8 +68,8 @@ export async function loadLive(base: string = import.meta.env.BASE_URL): Promise
 
 /** "40 min ago", "3 h ago", "2 days ago". */
 export function ago(min: number): string {
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
+  if (min < 1) return t('just now');
+  if (min < 60) return t('{n} min ago', { n: min });
   const h = Math.round(min / 60);
-  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+  return h < 48 ? t('{n} h ago', { n: h }) : t('{n} days ago', { n: Math.round(h / 24) });
 }

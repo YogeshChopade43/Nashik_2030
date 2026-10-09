@@ -161,7 +161,7 @@ export const LAYERS: MapLayerDef[] = [
   },
   {
     id: 'water-named', group: 'geography', label: 'Rivers & water bodies', color: '#3f86b0', defaultVisible: true, types: ['river', 'water_body'],
-    styleLayers: ['water-body-fill', 'water-river-line', 'water-river-hit'],
+    styleLayers: ['water-body-fill', 'water-river-line', 'water-river-hit', 'water-label-mr'],
     interactive: ['water-river-hit', 'water-body-fill'],
     install(map, data) {
       map.addSource('src-water', { type: 'geojson', data: fc(data.files.water), promoteId: 'id' });
@@ -172,6 +172,8 @@ export const LAYERS: MapLayerDef[] = [
         paint: { 'line-color': '#6fa6c5', 'line-width': w(9, hover(2.2, 0.9), 16, hover(8, 4)), 'line-opacity': hover(1, 0.75) },
       }, 'base-road-minor-casing');
       map.addLayer({ id: 'water-river-hit', type: 'line', source: 'src-water', filter: isLine, paint: { 'line-color': '#000', 'line-width': 14, 'line-opacity': 0 } }, 'base-road-minor-casing');
+      // Marathi river names (drawn only in Marathi mode, see map/lang.ts).
+      map.addLayer({ id: 'water-label-mr', type: 'symbol', source: 'src-water', filter: ['all', isLine, ['has', 'name_mr']], layout: { 'symbol-placement': 'line', 'symbol-spacing': 420 } });
     },
   },
   {

@@ -1,12 +1,13 @@
 // Pure summaries of live feeds for the UI (kept out of the component so they can be unit-tested).
 import type { FeedState } from './live';
+import { locale } from '../lib/i18n.ts';
 
 export interface WeatherEntry { t: string; temp_c: number; rain_mm: number; wind_kmh: number; wind_dir: number; cloud_pct: number }
 export interface ImdData { status: string; warnings: Record<string, unknown>[]; nowcast: Record<string, unknown>[]; rainfall: Record<string, unknown> | null; forecast: Record<string, unknown> | null }
 
 const TZ = 'Asia/Kolkata';
-export const fmtIST = (iso: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-IN', { timeZone: TZ, ...opts }).format(new Date(iso));
-const dayKey = (iso: string) => fmtIST(iso, { year: 'numeric', month: '2-digit', day: '2-digit' });
+export const fmtIST = (iso: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale(), { timeZone: TZ, ...opts }).format(new Date(iso));
+const dayKey = (iso: string) => new Intl.DateTimeFormat('en-IN', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
 const SEVERE = /\b(orange|red)\b/i;
 
 /** Current reading (a step within ±90 min of now, else none), rain in the next 24 h (null when the forecast
