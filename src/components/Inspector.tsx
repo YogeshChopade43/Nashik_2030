@@ -8,6 +8,7 @@ import type { Polygon } from 'geojson';
 import { LAYER_BY_TYPE, glyphOf } from '../map/layers';
 import { Icon, Mark, type IconName } from './Icon';
 import { getLang, locale, localName, t } from '../lib/i18n';
+import { SummitDetails, TrailDetails } from './Trek';
 
 export type Selection =
   | { kind: 'entity'; entity: CityEntity; segments?: CityEntity[] }
@@ -47,7 +48,13 @@ const FIELDS: Partial<Record<EntityType, Field[]>> = {
   locality: [['Place class', category], ['Population', tag('population')], ['Wikipedia', wiki]],
   city: [['Place class', category], ['Population', tag('population')], ['Wikipedia', wiki]],
   admin_boundary: [['Level', category], ['Wikipedia', wiki]],
+  fort: [['Category', category], ['Heritage', tag('heritage')], ['Wikipedia', wiki], ['Website', link('website')]],
+  peak: [['Wikipedia', wiki]],
+  trail: [['Route type', category], ['From', tag('from')], ['To', tag('to')], ['Operator', tag('operator')], ['Description', tag('description')], ['Website', link('website')]],
 };
+
+// Outside the city: no landmark directions or city context, trek details instead.
+const TREK_TYPES: EntityType[] = ['fort', 'peak', 'trail'];
 
 const PLACE_TYPES: EntityType[] = ['hospital', 'school', 'college', 'market', 'religious', 'tourism', 'government', 'bus_stop', 'railway_station', 'park', 'landmark', 'toilets', 'drinking_water'];
 const NA = () => <span className="text-muted/70">{t('Not available')}</span>;
@@ -253,7 +260,9 @@ export function Inspector({ selection, data, onSelect, onClose, onNearby, onBack
     header = { color: LAYER_BY_TYPE[p.type]?.color ?? '#8a8072', glyph: glyphOf(p.type), kicker: t(TYPE_LABEL[p.type]), title, local: other !== title ? other : null };
     body = (
       <>
-        {!isRoad && !['admin_boundary', 'river', 'water_body', 'city'].includes(p.type) && <DirectionsCard point={point} data={data} exclude={p.id} title={displayName(p)} />}
+        {p.type === 'trail' && <TrailDetails trail={selection.entity} data={data} onSelect={onSelect} />}
+        {(p.type === 'fort' || p.type === 'peak') && <SummitDetails place={selection.entity} data={data} onSelect={onSelect} />}
+        {!isRoad && !['admin_boundary', 'river', 'water_body', 'city', ...TREK_TYPES].includes(p.type) && <DirectionsCard point={point} data={data} exclude={p.id} title={displayName(p)} />}
         {isRoad && (
           <Section title={t('Whole road')}>
             <dl>
@@ -270,7 +279,7 @@ export function Inspector({ selection, data, onSelect, onClose, onNearby, onBack
           </dl>
         </Section>
         {zone && <ZoneSummary zone={zone} data={data} name={localName(p) ?? t('this locality')} />}
-        <Context point={point} data={data} exclude={p.id} onSelect={onSelect} isRoad={isRoad} radius={isRoad || p.type === 'admin_boundary' ? 600 : 1000} />
+        {!TREK_TYPES.includes(p.type) && <Context point={point} data={data} exclude={p.id} onSelect={onSelect} isRoad={isRoad} radius={isRoad || p.type === 'admin_boundary' ? 600 : 1000} />}
         <Provenance p={p} />
       </>
     );

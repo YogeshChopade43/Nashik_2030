@@ -35,6 +35,7 @@ export const GROUPS: { id: string; label: string }[] = [
   { id: 'places', label: 'Places' },
   { id: 'transport', label: 'Transport' },
   { id: 'geography', label: 'Geography' },
+  { id: 'outdoors', label: 'Treks & forts' },
   { id: 'base', label: 'Base map' },
 ];
 
@@ -92,6 +93,29 @@ function placeLayer(type: EntityType, label: string, color: string, defaultVisib
 
 // Category colours: saturated enough to read on paper, muted enough to sit calmly together.
 export const LAYERS: MapLayerDef[] = [
+  // ---------- treks (installed first, so trail lines sit beneath the city's markers) ----------
+  {
+    id: 'trail', group: 'outdoors', label: 'Trek trails', color: '#b4532a', defaultVisible: true, types: ['trail'],
+    styleLayers: ['trail-casing', 'trail-line', 'trail-hit', 'trail-label'],
+    interactive: ['trail-hit', 'trail-label'],
+    install(map, data) {
+      map.addSource('src-trail', { type: 'geojson', data: fc(data.byType.trail ?? []), promoteId: 'id' });
+      map.addLayer({ id: 'trail-casing', type: 'line', source: 'src-trail', minzoom: 9, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': C.halo, 'line-width': w(9, 2.5, 16, 7), 'line-opacity': 0.85 } });
+      map.addLayer({
+        id: 'trail-line', type: 'line', source: 'src-trail', minzoom: 9, layout: { 'line-join': 'round' },
+        paint: { 'line-color': '#b4532a', 'line-width': w(9, hover(2.4, 1.3), 16, hover(5, 3)), 'line-dasharray': [2, 1.4] },
+      });
+      map.addLayer({ id: 'trail-hit', type: 'line', source: 'src-trail', minzoom: 9, paint: { 'line-color': '#000', 'line-width': 14, 'line-opacity': 0 } });
+      map.addLayer({
+        id: 'trail-label', type: 'symbol', source: 'src-trail', minzoom: 12,
+        layout: { 'symbol-placement': 'line', 'symbol-spacing': 500, 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Italic'], 'text-size': 11, 'text-offset': [0, 0.9] },
+        paint: { 'text-color': '#8f3f1d', 'text-halo-color': C.halo, 'text-halo-width': 1.6 },
+      });
+    },
+  },
+  placeLayer('fort', 'Forts', '#8a4b2a', true, 'outdoors'),
+  placeLayer('peak', 'Peaks', '#6d5f4b', false, 'outdoors'),
+
   // ---------- places ----------
   placeLayer('hospital', 'Hospitals', '#cf3f57', true),
   placeLayer('school', 'Schools', '#c27c0e', false),

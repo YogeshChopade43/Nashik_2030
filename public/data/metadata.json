@@ -1,5 +1,5 @@
 {
-  "extracted_at": "2026-10-09T17:06:00.167Z",
+  "extracted_at": "2026-10-09T21:04:03.256Z",
   "bbox": {
     "south": 19.85,
     "west": 73.5,
@@ -29,7 +29,7 @@
       "file": "data/places.geojson",
       "fetched_at": "2026-10-09T17:06:00.058Z",
       "description": "Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations, public toilets, drinking water, and local landmarks (named chowks/nakas/circles/signals, petrol pumps, banks, pharmacies, cinemas, water tanks)",
-      "features": 695,
+      "features": 685,
       "source": "OpenStreetMap contributors via Overpass API",
       "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
       "osm_data_timestamp": "2026-10-09T17:04:51Z",
@@ -74,6 +74,16 @@
       "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
       "osm_data_timestamp": "2026-10-09T11:02:21Z",
       "overpass_query": "[out:json][timeout:120][bbox:19.85,73.5,20.15,74.05];\nnode[place~\"^(city|town|suburb|neighbourhood|quarter|village|hamlet|locality)$\"];\nout meta;"
+    },
+    "treks": {
+      "file": "data/treks.geojson",
+      "fetched_at": "2026-10-09T21:04:03.218Z",
+      "description": "Forts (historic=fort|castle, fortification sites), named peaks and marked hiking routes (route=hiking relations, ways joined into continuous paths) across the wider Nashik region",
+      "features": 199,
+      "source": "OpenStreetMap contributors via Overpass API",
+      "license": "ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)",
+      "osm_data_timestamp": "2026-10-09T21:02:51Z",
+      "overpass_query": "[out:json][timeout:180][bbox:19.4,72.9,20.6,74.7];\n(\n  nwr[historic~\"^(fort|castle)$\"];\n  nwr[historic=archaeological_site][site_type=fortification];\n  node[natural=peak][name];\n);\nout meta center;\nrel[route=hiking];\nout meta geom;"
     },
     "boundaries": {
       "file": "data/boundaries.geojson",

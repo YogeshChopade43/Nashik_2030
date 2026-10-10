@@ -9,6 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import osmtogeojson from 'osmtogeojson';
 import { dedupePlaces } from '../src/lib/dedupe.ts';
+import { chainLines } from '../src/lib/trails.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const RAW = path.join(ROOT, 'data/raw');
@@ -18,6 +19,8 @@ const OUT = path.join(ROOT, 'public/data');
 // Overpass order: south, west, north, east.
 export const BBOX = [19.85, 73.5, 20.15, 74.05];
 const B = BBOX.join(',');
+// Treks reach well beyond the city: the whole map region (matches the app's maxBounds).
+const REGION = '19.4,72.9,20.6,74.7';
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -61,6 +64,16 @@ out meta geom;`,
   localities: `[out:json][timeout:120][bbox:${B}];
 node[place~"^(city|town|suburb|neighbourhood|quarter|village|hamlet|locality)$"];
 out meta;`,
+  // Forts, named peaks and marked hiking routes across the region.
+  treks: `[out:json][timeout:180][bbox:${REGION}];
+(
+  nwr[historic~"^(fort|castle)$"];
+  nwr[historic=archaeological_site][site_type=fortification];
+  node[natural=peak][name];
+);
+out meta center;
+rel[route=hiking];
+out meta geom;`,
   // Taluka (sub-district) boundaries. OSM has no Nashik municipal ward boundaries.
   boundaries: `[out:json][timeout:180];
 rel[boundary=administrative][admin_level=6](${B});
@@ -132,7 +145,7 @@ function categoryOf(type, t) {
 }
 
 const PREFIX = { node: 'n', way: 'w', relation: 'r' };
-const KEEP_TAGS = ['name:en', 'name:mr', 'alt_name', 'short_name', 'old_name', 'official_name', 'operator', 'operator:type', 'addr:full', 'addr:street', 'addr:city', 'addr:postcode', 'phone', 'website', 'opening_hours', 'wikipedia', 'wikidata', 'ref', 'lanes', 'maxspeed', 'surface', 'oneway', 'bridge', 'religion', 'denomination', 'beds', 'emergency', 'isced:level', 'population', 'heritage', 'brand', 'fee', 'female', 'male', 'unisex', 'wheelchair', 'access'];
+const KEEP_TAGS = ['name:en', 'name:mr', 'alt_name', 'short_name', 'old_name', 'official_name', 'operator', 'operator:type', 'addr:full', 'addr:street', 'addr:city', 'addr:postcode', 'phone', 'website', 'opening_hours', 'wikipedia', 'wikidata', 'ref', 'lanes', 'maxspeed', 'surface', 'oneway', 'bridge', 'religion', 'denomination', 'beds', 'emergency', 'isced:level', 'population', 'heritage', 'brand', 'fee', 'female', 'male', 'unisex', 'wheelchair', 'access', 'ele', 'distance', 'from', 'to', 'description', 'sac_scale', 'network'];
 
 const round = (n) => Math.round(n * 1e5) / 1e5;
 function roundCoords(c) { return typeof c[0] === 'number' ? [round(c[0]), round(c[1])] : c.map(roundCoords); }
@@ -201,6 +214,7 @@ const processors = {
       const type = placeType(t);
       const lon = el.lon ?? el.center?.lon, lat = el.lat ?? el.center?.lat;
       if (!type || lon == null) continue;
+      if (['fort', 'castle'].includes(t.historic)) continue; // forts live in the treks dataset
       // Petrol pumps named just "Fuel" are named by brand ("Indian Oil petrol pump"), or skipped — never invented.
       if (type === 'landmark' && t.amenity === 'fuel' && (!t.name || /^fuel$/i.test(t.name.trim()))) {
         const brand = t.brand?.trim();
@@ -217,6 +231,31 @@ const processors = {
       out.push(f);
     }
     return dedupePlaces(out);
+  },
+  treks(raw) {
+    const out = [];
+    for (const el of raw.elements) {
+      const t = el.tags ?? {};
+      if (el.type === 'relation' && t.route === 'hiking') {
+        const ways = (el.members ?? []).filter((m) => m.type === 'way' && m.geometry?.length > 1).map((m) => m.geometry.map((p) => [p.lon, p.lat]));
+        const lines = chainLines(ways);
+        if (!lines.length || !(t.name || t.ref)) continue;
+        const f = entity('trail', 'trail', { ...el, tags: { ...t, name: t.name ?? t.ref } }, { type: 'MultiLineString', coordinates: lines });
+        const NETWORK = { iwn: 'international', nwn: 'national', rwn: 'regional', lwn: 'local' };
+        f.properties.category = t.network ? `${NETWORK[t.network] ?? t.network} hiking route` : 'hiking route';
+        out.push(f);
+        continue;
+      }
+      const lon = el.lon ?? el.center?.lon, lat = el.lat ?? el.center?.lat;
+      if (lon == null || !(t.name || t['name:en'])) continue;
+      const isFort = ['fort', 'castle'].includes(t.historic) || t.site_type === 'fortification';
+      // Same "place_" id prefix the forts had in the places dataset, so shared links keep working.
+      const f = entity('place', isFort ? 'fort' : 'peak', el, { type: 'Point', coordinates: [lon, lat] });
+      f.properties.category = isFort ? (t.historic === 'castle' ? 'castle' : 'fort') : 'peak';
+      out.push(f);
+    }
+    const points = dedupePlaces(out.filter((f) => f.properties.type !== 'trail'));
+    return [...points, ...out.filter((f) => f.properties.type === 'trail')];
   },
   roads(raw) {
     return raw.elements.filter((el) => el.geometry?.length > 1).map((el) => {
@@ -264,6 +303,7 @@ const DESCRIPTIONS = {
   places: 'Public POIs: hospitals, schools, colleges, markets, religious places, tourist places, government facilities, bus stops, railway stations, public toilets, drinking water, and local landmarks (named chowks/nakas/circles/signals, petrol pumps, banks, pharmacies, cinemas, water tanks)',
   roads: 'Named road segments (OSM ways), motorway through living_street',
   parks: 'Parks and gardens (leisure=park|garden) as polygons',
+  treks: 'Forts (historic=fort|castle, fortification sites), named peaks and marked hiking routes (route=hiking relations, ways joined into continuous paths) across the wider Nashik region',
   water: 'Named rivers, streams, canals, lakes and reservoirs',
   localities: 'Settlement and locality points (place=city|town|suburb|neighbourhood|village|…)',
   boundaries: 'Taluka / sub-district administrative boundaries (admin_level=6), simplified ~30 m',

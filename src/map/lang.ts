@@ -10,12 +10,13 @@ import { C } from './style';
 
 interface LabelStyle { size: number; weight: number; color: string; anchor: 'top' | 'bottom' | 'center'; offset: [number, number]; line?: boolean }
 
-const PLACE_TYPES = ['hospital', 'school', 'college', 'market', 'religious', 'tourism', 'government', 'landmark', 'toilets', 'railway_station', 'bus_stop'];
+const PLACE_TYPES = ['hospital', 'school', 'college', 'market', 'religious', 'tourism', 'government', 'landmark', 'toilets', 'railway_station', 'bus_stop', 'fort', 'peak'];
 const STYLES: Record<string, Omit<LabelStyle, 'color'> & { color?: string }> = {
   ...Object.fromEntries(PLACE_TYPES.map((t) => [`${t}-label`, { size: 11.5, weight: 500, anchor: 'top', offset: [0, 10] }])),
   'park-label': { size: 11.5, weight: 500, color: '#4a7a3c', anchor: 'center', offset: [0, 0] },
   'locality-label': { size: 13, weight: 600, color: '#5a5145', anchor: 'bottom', offset: [0, -4] },
   'boundary-label': { size: 11, weight: 600, color: '#8a6db1', anchor: 'center', offset: [0, -12], line: true },
+  'trail-label': { size: 11.5, weight: 500, color: '#8f3f1d', anchor: 'center', offset: [0, 12], line: true },
   'water-label-mr': { size: 12.5, weight: 500, color: C.waterLabel, anchor: 'center', offset: [0, 0], line: true },
 };
 // Base-map labels hidden for names we draw in Marathi ourselves (rivers are labelled from the tiles).

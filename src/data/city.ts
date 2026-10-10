@@ -3,7 +3,7 @@ import { bbox, normalizeName, type BBox } from '../lib/geo';
 import { getLang, localName, marathiName, t } from '../lib/i18n';
 import { LAYER_BY_TYPE } from '../map/layers';
 
-const FILES = ['places', 'roads', 'parks', 'water', 'localities', 'boundaries'] as const;
+const FILES = ['places', 'roads', 'parks', 'water', 'localities', 'boundaries', 'treks'] as const;
 type FileName = (typeof FILES)[number];
 
 export interface CityData {
@@ -39,6 +39,7 @@ export const TYPE_LABEL: Record<EntityType, string> = {
   college: 'College', market: 'Market', religious: 'Religious place', tourism: 'Tourist place',
   government: 'Government facility', bus_stop: 'Bus stop', railway_station: 'Railway station',
   landmark: 'Landmark', toilets: 'Public toilet', drinking_water: 'Drinking water',
+  fort: 'Fort', peak: 'Peak', trail: 'Trek trail',
 };
 
 /** Name to show; unnamed infrastructure (bus stops, toilets, water points) is labelled by its type. */
@@ -53,7 +54,7 @@ const CATEGORY_WORDS: Record<string, string[]> = {
   market: ['market', 'markets', 'mall', 'malls', 'bazaar', 'shopping', 'बाजार', 'मंडई', 'मॉल'],
   park: ['park', 'parks', 'garden', 'gardens', 'उद्यान', 'बाग'],
   religious: ['temple', 'temples', 'mandir', 'mosque', 'masjid', 'church', 'religious', 'worship', 'मंदिर', 'देऊळ', 'मशीद', 'चर्च', 'गुरुद्वारा'],
-  tourism: ['tourist', 'tourism', 'attraction', 'attractions', 'museum', 'landmark', 'landmarks', 'sightseeing', 'पर्यटन', 'संग्रहालय', 'किल्ला'],
+  tourism: ['tourist', 'tourism', 'attraction', 'attractions', 'museum', 'landmark', 'landmarks', 'sightseeing', 'पर्यटन', 'संग्रहालय'],
   government: ['government', 'police', 'post office', 'court', 'fire station', 'office', 'सरकारी', 'पोलीस', 'पोस्ट', 'न्यायालय', 'कार्यालय'],
   bus_stop: ['bus', 'bus stop', 'bus stops', 'bus station', 'transit', 'बस', 'बस थांबा', 'बस स्थानक'],
   railway_station: ['railway', 'railway station', 'train', 'station', 'रेल्वे', 'रेल्वे स्थानक', 'स्टेशन'],
@@ -61,6 +62,9 @@ const CATEGORY_WORDS: Record<string, string[]> = {
   toilets: ['toilet', 'toilets', 'washroom', 'restroom', 'public toilet', 'urinal', 'शौचालय', 'स्वच्छतागृह', 'मुतारी'],
   drinking_water: ['drinking water', 'water point', 'water tap', 'पिण्याचे पाणी', 'पाणपोई'],
   locality: ['locality', 'localities', 'neighbourhood', 'neighborhood', 'area', 'परिसर'],
+  fort: ['fort', 'forts', 'killa', 'gad', 'durg', 'किल्ला', 'किल्ले', 'गड'],
+  peak: ['peak', 'peaks', 'mountain', 'hill', 'शिखर', 'डोंगर'],
+  trail: ['trek', 'treks', 'trekking', 'trail', 'trails', 'hike', 'hiking', 'ट्रेक', 'ट्रेकिंग', 'पायवाट'],
 };
 
 export type SearchItem =
@@ -70,6 +74,7 @@ export type SearchItem =
 
 const TYPE_RANK: Partial<Record<EntityType, number>> = {
   city: 14, locality: 10, railway_station: 10, tourism: 11, landmark: 9, road_segment: 8, river: 8, water_body: 7,
+  fort: 11, trail: 9, peak: 7,
   college: 6, hospital: 6, admin_boundary: 5, market: 5, park: 4, government: 4, religious: 4, school: 4, bus_stop: 2,
 };
 

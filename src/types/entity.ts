@@ -28,7 +28,10 @@ export type EntityType =
   | 'railway_station'
   | 'landmark'
   | 'toilets'
-  | 'drinking_water';
+  | 'drinking_water'
+  | 'fort'
+  | 'peak'
+  | 'trail';
 
 export interface EntityProps {
   /** Stable ID: `<prefix>_<n|w|r><osm id>`, e.g. `place_n1671916246`. */

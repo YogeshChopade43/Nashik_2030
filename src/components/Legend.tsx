@@ -39,6 +39,10 @@ export function Legend({ visible, onClose }: { visible: Record<string, boolean>;
       ...(places.length ? [<Row key="cluster" swatch={<span className="grid w-9 place-items-center"><span className="grid size-5 place-items-center rounded-full border-[1.5px] border-muted bg-[#fffdf8] text-[9px] font-bold text-muted">12</span></span>} label="Group of places (tap to expand)" />] : []),
       ...(on('park') ? [<Row key="park" swatch={<Area fill={C.park} stroke="#93b97f" />} label="Park or garden" />] : []),
     ]],
+    ['Treks', [
+      ...LAYERS.filter((l) => (l.id === 'fort' || l.id === 'peak') && on(l.id)).map((l) => <Row key={l.id} swatch={<span className="grid w-9 place-items-center"><Mark glyph={glyphOf(l.id)} color={l.color} className="size-5" /></span>} label={l.label} />),
+      ...(on('trail') ? [<Row key="tr" swatch={<Line color="#b4532a" width={2.5} dash="4 2.8" />} label="Trek trail (marked route)" />] : []),
+    ]],
     ['Roads & rail', [
       ...(on('major') ? [<Row key="hw" swatch={<Line color={C.highway} casing={C.highwayCasing} />} label="Highway" />, <Row key="pr" swatch={<Line color={C.primary} casing={C.primaryCasing} />} label="Main road" />] : []),
       ...(on('roads') ? [<Row key="st" swatch={<Line color="#ffffff" casing={C.casing} width={3} />} label="Street" />] : []),

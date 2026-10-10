@@ -54,7 +54,7 @@ export function Nearby({ origin, radius, onRadius, data, onSelect, onClose }: {
     <div className="flex max-h-full min-h-0 flex-col">
       <header className="px-5 pt-5 pb-3">
         <div className="flex items-start gap-3.5">
-          <Mark glyph="M10 12a2 2 0 1 0 4 0 2 2 0 1 0-4 0M6 12a6 6 0 1 0 12 0 6 6 0 1 0-12 0M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5" color="#1f5f7a" className="mt-0.5 size-11" />
+          <Mark glyph="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3" color="#1f5f7a" className="mt-0.5 size-11" />
           <div className="min-w-0 flex-1">
             <p className="mb-1 text-[10.5px] font-semibold tracking-[0.18em] text-accent uppercase">{t('Nearby')} <span className="font-medium tracking-normal normal-case text-muted">{t('· drag the circle to adjust')}</span></p>
             <h2 className="font-display text-[23px] leading-[1.15] font-semibold tracking-[-0.01em] text-balance text-fg">{origin.label}</h2>
