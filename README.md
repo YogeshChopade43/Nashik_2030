@@ -94,6 +94,13 @@ Exact OSM snapshot timestamps per dataset are in `public/data/metadata.json`.
 3. Elements are classified into `CityEntity` types. Unnamed POIs are dropped, except bus stops, which are real infrastructure even when unnamed.
 4. Coordinates are rounded to 5 decimals (~1 m). Taluka boundaries are simplified with Douglas–Peucker (3×10⁻⁴°, ~30 m).
 5. Stable IDs are derived from the OSM element: `place_n1671916246` comes from `node/1671916246`.
+6. Duplicates are merged (`src/lib/dedupe.ts`, tested against the shipped data):
+   - **Same name nearby:** same type and name within 50 m becomes one place, e.g. a roundabout mapped as a node plus ring ways. Forts use 500 m and peaks 150 m. For forts, peaks and localities the OSM category is ignored (fort/castle, village/hamlet).
+   - **Fort and peak:** a peak named like a fort within 400 m becomes part of that fort, which takes the peak's height.
+   - **Same hiking route twice:** merged only when the names share the same words and at least 60% of the routes overlap.
+   - **One OSM element in two datasets is kept once:** parks keep their outline, areas (suburb, village) stay localities, and named spots (Ramkund) stay POIs.
+   - **Same name, matching address:** same name within 300 m merges when the addresses agree or only one copy has an address (a point plus a building outline). Villages merge within 500 m.
+   - **Review the rest:** `npm run dupes` lists look-alikes the rules leave alone. Verdicts on checked pairs live in `scripts/duplicates-reviewed.json`, so only new look-alikes show up.
 
 To refresh after OSM edits, run `npm run data`. If you only changed processing code, `npm run data -- --cached` re-processes the raw files without fetching.
 

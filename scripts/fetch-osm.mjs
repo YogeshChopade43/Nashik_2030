@@ -8,7 +8,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import osmtogeojson from 'osmtogeojson';
-import { dedupePlaces } from '../src/lib/dedupe.ts';
+import { dedupePlaces, dedupeTrails, mergeSummits, resolveSharedElements } from '../src/lib/dedupe.ts';
 import { chainLines } from '../src/lib/trails.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -254,8 +254,8 @@ const processors = {
       f.properties.category = isFort ? (t.historic === 'castle' ? 'castle' : 'fort') : 'peak';
       out.push(f);
     }
-    const points = dedupePlaces(out.filter((f) => f.properties.type !== 'trail'));
-    return [...points, ...out.filter((f) => f.properties.type === 'trail')];
+    const points = mergeSummits(dedupePlaces(out.filter((f) => f.properties.type !== 'trail')));
+    return [...points, ...dedupeTrails(out.filter((f) => f.properties.type === 'trail'))];
   },
   roads(raw) {
     return raw.elements.filter((el) => el.geometry?.length > 1).map((el) => {
@@ -282,12 +282,12 @@ const processors = {
     });
   },
   localities(raw) {
-    return raw.elements.filter((el) => el.tags?.name).map((el) => {
+    return dedupePlaces(raw.elements.filter((el) => el.tags?.name).map((el) => {
       const isCity = el.tags.place === 'city';
       const f = entity(isCity ? 'city' : 'locality', isCity ? 'city' : 'locality', el, { type: 'Point', coordinates: [el.lon, el.lat] });
       f.properties.category = el.tags.place;
       return f;
-    });
+    }));
   },
   boundaries(raw) {
     return toGeojson(raw).filter((f) => f.geometry.type.endsWith('Polygon')).map((f) => {
@@ -315,6 +315,7 @@ const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7).split('
 await fs.mkdir(RAW, { recursive: true });
 await fs.mkdir(OUT, { recursive: true });
 const datasets = {};
+const outputs = {};
 
 for (const [name, query] of Object.entries(QUERIES)) {
   const rawPath = path.join(RAW, `${name}.json`);
@@ -325,19 +326,25 @@ for (const [name, query] of Object.entries(QUERIES)) {
     raw = await overpass(name, query);
     await fs.writeFile(rawPath, JSON.stringify(raw));
   }
-  const features = processors[name](raw);
-  await fs.writeFile(path.join(OUT, `${name}.geojson`), JSON.stringify({ type: 'FeatureCollection', features }));
+  outputs[name] = processors[name](raw);
   datasets[name] = {
     file: `data/${name}.geojson`,
     fetched_at: cached || (only && !only.includes(name)) ? null : new Date().toISOString(),
     description: DESCRIPTIONS[name],
-    features: features.length,
+    features: 0, // set after cross-dataset resolution below
     source: 'OpenStreetMap contributors via Overpass API',
     license: 'ODbL 1.0 (https://opendatacommons.org/licenses/odbl/)',
     osm_data_timestamp: raw.osm3s?.timestamp_osm_base ?? null,
     overpass_query: query,
   };
-  console.log(`  → ${features.length} entities`);
+}
+
+// One OSM element can match two datasets (a suburb also tagged as an attraction): keep one copy.
+const resolved = resolveSharedElements(outputs);
+for (const [name, features] of Object.entries(resolved)) {
+  await fs.writeFile(path.join(OUT, `${name}.geojson`), JSON.stringify({ type: 'FeatureCollection', features }));
+  datasets[name].features = features.length;
+  console.log(`  ${name} → ${features.length} entities`);
 }
 
 const metaPath = path.join(OUT, 'metadata.json');
@@ -351,7 +358,8 @@ await fs.writeFile(metaPath, JSON.stringify({
     'Overpass API query per dataset (raw responses in data/raw/, git-ignored)',
     'Multipolygon/relation assembly via osmtogeojson',
     'Classification into CityEntity types; unnamed POIs dropped except bus stops; roundabout ways named after their street skipped',
-    'Duplicate places merged: same type, category and name within 50 m (e.g. a roundabout mapped as a node plus ring ways)',
+    'Duplicates merged: same type and name within 50 m (forts 500 m, peaks 150 m; e.g. a roundabout mapped as a node plus ring ways); a peak named like a fort within 400 m merged into the fort; the same hiking route mapped twice merged',
+    'One OSM element in two datasets kept once: parks keep their outline, areas (suburb, village) stay localities, named spots stay POIs',
     'Coordinates rounded to 5 decimals (~1 m); boundaries simplified with Douglas–Peucker (3e-4°)',
     'Stable IDs derived from OSM element type + id',
   ],

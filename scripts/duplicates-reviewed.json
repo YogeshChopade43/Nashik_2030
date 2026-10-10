@@ -1,0 +1,17 @@
+{
+  "_about": "Look-alike pairs a person has checked (npm run dupes hides them). 'distinct' = two real places; 'fix-in-osm' = a real duplicate or misspelling to correct in OpenStreetMap; 'verify' = probably a duplicate, needs a local check. Reviewed 2026-10-10 from OSM tags, addresses, mappers and edit dates.",
+  "way/410830577|way/1184821494": { "verdict": "distinct", "note": "Gondeshwar temple building and its garden (park polygon reuses the temple's name)" },
+  "node/10578525641|node/11035036236": { "verdict": "distinct", "note": "Two temples with the generic name 'Mandir', different mappers" },
+  "way/1469207351|way/1470375433": { "verdict": "distinct", "note": "Two Shiv Mandir buildings, 88 m apart" },
+  "node/3571657793|way/436347203": { "verdict": "distinct", "note": "Bhonsala Military School vs College on the same campus" },
+  "node/4115262090|relation/20140840": { "verdict": "distinct", "note": "Ramkund bathing spot vs the Ram Kund water area" },
+  "node/13482055272|node/13482071672": { "verdict": "distinct", "note": "Two HP petrol pumps, 133 m apart" },
+  "way/958885329|way/958885623": { "verdict": "distinct", "note": "Kishor Nagar Garden 1 and 2" },
+  "node/3318747599|node/3318747600": { "verdict": "distinct", "note": "Opposite-direction bus stops, mapped together" },
+  "node/3205666989|node/9197240540": { "verdict": "distinct", "note": "Temple on Anjaneri hill vs Anjaneri fort" },
+  "node/3318747593|node/3672851564": { "verdict": "fix-in-osm", "note": "'Ashoknagar' stop (2015, other mapper) looks like a third copy of the Ashok Nagar stop pair" },
+  "node/3318747596|node/3672851564": { "verdict": "fix-in-osm", "note": "Same 'Ashoknagar' extra stop" },
+  "node/3571657793|way/436343756": { "verdict": "fix-in-osm", "note": "Same school: point misspelled 'Bhosala' (2016) and campus outline 'Bhonsala' (2019); delete the point or move its tags to the outline" },
+  "node/10281649592|node/10536398592": { "verdict": "verify", "note": "Sai Baba Mandir / Sai Baba Temple, same mapper 3 weeks apart, 185 m" },
+  "node/13474093806|way/1469207342": { "verdict": "verify", "note": "Sundar Narayan Mandir point and building, same mapper same day, 232 m apart" }
+}
