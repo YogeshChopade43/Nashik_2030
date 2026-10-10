@@ -59,6 +59,10 @@ function loadLang(): Lang {
   return l;
 }
 
+/** A map that map.remove() hasn't torn down. On hot reload React re-runs effects with the old map
+ * right after the cleanup removed it; those effects must treat it as no map. */
+const alive = (m: MLMap | null): m is MLMap => !!m?.style;
+
 let pmtilesRegistered = false;
 function registerPmtiles() {
   if (pmtilesRegistered) return;
@@ -171,7 +175,7 @@ export default function App() {
 
   // Filters replace the layer's source data, so cluster counts reflect only matching places.
   useEffect(() => {
-    if (!map || !data || !installed) return;
+    if (!alive(map) || !data || !installed) return;
     const ctx = { asOf: Date.parse(data.meta.extracted_at) };
     for (const def of LAYERS) {
       const defs = FILTERS[def.id];
@@ -183,7 +187,7 @@ export default function App() {
 
   // ---- install overlay layers once both are ready ----
   useEffect(() => {
-    if (!map || !data || installed) return;
+    if (!alive(map) || !data || installed) return;
     for (const def of LAYERS) def.install?.(map, data);
     // Nearby search area: soft wash + dashed rim + origin dot.
     map.addSource('nearby', { type: 'geojson', data: EMPTY });
@@ -208,7 +212,7 @@ export default function App() {
   }, [map, data, installed]);
 
   useEffect(() => {
-    if (map) for (const def of LAYERS) setLayerVisibility(map, def, !def.unavailable && !!visible[def.id]);
+    if (alive(map)) for (const def of LAYERS) setLayerVisibility(map, def, !def.unavailable && !!visible[def.id]);
   }, [map, visible, installed]);
 
   function switchLang() {
@@ -219,11 +223,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (map && data && installed) applyMapLang(map, data, lang);
+    if (alive(map) && data && installed) applyMapLang(map, data, lang);
   }, [map, data, installed, lang]);
 
   useEffect(() => {
-    if (!map || !installed) return;
+    if (!alive(map) || !installed) return;
     const src = map.getSource<GeoJSONSource>('selection');
     if (!selection) src?.setData(EMPTY);
     else if (selection.kind === 'entity') src?.setData({ type: 'FeatureCollection', features: selection.segments ?? [selection.entity] });
@@ -246,7 +250,7 @@ export default function App() {
     : { top: 90, bottom: 50, left: layersOpen ? 360 : 50, right: 420 }), [isMobile, layersOpen]);
 
   const selectEntity = useCallback((e: CityEntity, fly = true) => {
-    if (!map || !data) return;
+    if (!alive(map) || !data) return;
     const p = e.properties;
     const segments = p.type === 'road_segment' && p.name ? roadSegmentsByName(p.name, data.files.roads) : undefined;
     const layer = LAYER_BY_TYPE[p.type];
@@ -292,7 +296,7 @@ export default function App() {
   }, [near, isMobile, fitNearby]);
 
   function nearbyHere() {
-    if (!map) return;
+    if (!alive(map)) return;
     const centre = () => { const c = map.getCenter(); openNearby([c.lng, c.lat], t('Around map centre')); };
     if (!navigator.geolocation) return centre();
     // The browser's own timeout only starts after permission is granted, so guard an unanswered prompt.
@@ -312,7 +316,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!map || !installed) return;
+    if (!alive(map) || !installed) return;
     const src = map.getSource<GeoJSONSource>('nearby');
     src?.setData(near ? { type: 'Feature', properties: {}, geometry: circle(near.origin.point, near.radius) } : EMPTY);
   }, [map, installed, near]);
@@ -324,7 +328,7 @@ export default function App() {
   nearRef.current = near;
   useEffect(() => () => { handles.current?.c.remove(); handles.current?.e.remove(); handles.current = null; }, [map]);
   useEffect(() => {
-    if (!map) return;
+    if (!alive(map)) return;
     if (!near) { handles.current?.c.remove(); handles.current?.e.remove(); handles.current = null; return; }
     const edgeOf = (p: LngLat, r: number): LngLat => [p[0] + r / (111_195 * Math.cos((p[1] * Math.PI) / 180)), p[1]];
     if (!handles.current) {
@@ -376,7 +380,7 @@ export default function App() {
 
   // ---- hover + click (registered once; uses refs for fresh callbacks) ----
   useEffect(() => {
-    if (!map || !data || !installed) return;
+    if (!alive(map) || !data || !installed) return;
     const interactive = LAYERS.flatMap((l) => l.interactive ?? []);
     let hovered: { source: string; id: string | number } | null = null;
     const query = (pt: maplibregl.Point, pad: number) =>
@@ -435,7 +439,7 @@ export default function App() {
   }, [map, data, installed]);
 
   function onPick(item: SearchItem) {
-    if (!map || !data) return;
+    if (!alive(map) || !data) return;
     setNear(null);
     if (item.kind === 'entity') selectEntity(item.entity);
     else if (item.kind === 'road') selectEntity(item.segments[0]);

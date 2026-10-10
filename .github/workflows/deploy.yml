@@ -29,25 +29,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
       - run: npm test
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
       # Live data: from the calling run if it just fetched it, otherwise the latest successful one.
       - if: ${{ inputs.live_from_this_run }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: live
           path: public/live
       - if: ${{ !inputs.live_from_this_run }}
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@634d83b91986fcec9be314054943fa5c976aeb0e # v25
         with:
           workflow: live.yml
           name: live
@@ -57,12 +57,12 @@ jobs:
 
       # Tiles: same rule. If none exist yet, the app falls back to OpenFreeMap automatically.
       - if: ${{ inputs.tiles_from_this_run }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: tiles
           path: public/tiles
       - if: ${{ !inputs.tiles_from_this_run }}
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@634d83b91986fcec9be314054943fa5c976aeb0e # v25
         with:
           workflow: tiles.yml
           name: tiles
@@ -71,7 +71,7 @@ jobs:
           if_no_artifact_found: warn
 
       # Glyphs change rarely: cache them so each deploy doesn't re-download ~770 files.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: public/fonts
           key: glyphs-noto-sans-v1
@@ -86,7 +86,7 @@ jobs:
           echo "PAGES_BASE=$PAGES_BASE"
           case "$PAGES_BASE" in /?*/) ;; *) echo "bad base: $PAGES_BASE"; exit 1;; esac
           npm run build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
@@ -98,4 +98,4 @@ jobs:
       url: ${{ steps.pages.outputs.page_url }}
     steps:
       - id: pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

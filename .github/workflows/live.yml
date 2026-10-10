@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
@@ -30,7 +30,7 @@ jobs:
       # Start from the last published feeds: a feed that fails this run keeps its previous file
       # (the app then marks it stale) instead of disappearing.
       - name: Restore previous live data
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@634d83b91986fcec9be314054943fa5c976aeb0e # v25
         with:
           workflow: live.yml
           name: live
@@ -42,7 +42,7 @@ jobs:
         env:
           EWDS_API_KEY: ${{ secrets.EWDS_API_KEY }}
           IMD_API_KEY: ${{ secrets.IMD_API_KEY }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: live
           path: public/live

@@ -19,12 +19,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
+      # Pinned: a new Planetiler release can change the tile schema the map style depends on.
+      # To upgrade, bump PLANETILER and check the map still renders.
       - name: Download Planetiler
-        run: curl -fsSL -o planetiler.jar https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar
+        env:
+          PLANETILER: v0.10.2
+        run: curl -fsSL -o planetiler.jar "https://github.com/onthegomap/planetiler/releases/download/$PLANETILER/planetiler.jar"
       - name: Build Nashik PMTiles
         run: >
           java -Xmx6g -jar planetiler.jar
@@ -35,7 +39,7 @@ jobs:
           --output=nashik.pmtiles
       - name: Report size
         run: ls -lh nashik.pmtiles
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tiles
           path: nashik.pmtiles
