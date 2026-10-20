@@ -115,6 +115,8 @@ To refresh after OSM edits, run `npm run data`. If you only changed processing c
 
 Live feeds are built by scheduled GitHub Actions jobs. The jobs fetch each source and write small JSON files, and GitHub Pages serves those files with the app. It costs ₹0 to run, and every user reads static files, so there's no per-user limit. No freemium or metered API is used.
 
+> **Automatic runs are currently paused.** `deploy`, `live` and `tiles` run only when started by hand (Actions → *workflow* → Run workflow). The Refresh column below is the schedule they run on when re-enabled; each workflow file's header comment shows the line to add back.
+
 | Feed | Source & license | Refresh | Needs |
 |---|---|---|---|
 | `live/weather.json` | ECMWF Open Data, IFS 0.25° (CC BY 4.0) | every 3 h (00/12 UTC runs, 0–144 h) | nothing |

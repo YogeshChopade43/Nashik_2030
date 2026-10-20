@@ -1,9 +1,9 @@
 # Build the app with the latest live data, tiles and fonts, and publish to GitHub Pages.
 name: deploy
 
+# Automatic deploys are paused: run by hand (Actions → deploy → Run workflow).
+# To deploy on every push again, add back:  push: { branches: [main] }
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
   workflow_call:
     inputs:

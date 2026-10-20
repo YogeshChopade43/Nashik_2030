@@ -1,9 +1,9 @@
 # Weekly: OSM (Geofabrik western India) → Planetiler (OpenMapTiles schema) → nashik.pmtiles → Pages deploy.
 name: tiles
 
+# Scheduled runs are paused: run by hand (Actions → tiles → Run workflow).
+# To rebuild weekly again, add back:  schedule: [{ cron: '0 2 * * 1' }]
 on:
-  schedule:
-    - cron: '0 2 * * 1'
   workflow_dispatch:
 
 permissions:

@@ -2,9 +2,9 @@
 # Free on public repos; users read static files, so usage is unlimited.
 name: live
 
+# Scheduled runs are paused: run by hand (Actions → live → Run workflow).
+# To refresh every 3 hours again, add back:  schedule: [{ cron: '15 */3 * * *' }]
 on:
-  schedule:
-    - cron: '15 */3 * * *'
   workflow_dispatch:
 
 permissions:

@@ -54,3 +54,11 @@ def test_planetiler_is_pinned():
     tiles = (WF / "tiles.yml").read_text(encoding="utf8")
     assert "releases/latest" not in tiles
     assert re.search(r"PLANETILER: v\d+\.\d+\.\d+", tiles)
+
+
+def test_deploys_only_run_when_started_by_hand():
+    # Deploys are paused: nothing publishes to Pages unless someone clicks "Run workflow".
+    for name in ("deploy.yml", "live.yml", "tiles.yml"):
+        wf = yaml.safe_load((WF / name).read_text(encoding="utf8"))
+        triggers = wf.get("on", wf.get(True))  # PyYAML reads the bare key `on` as True
+        assert set(triggers) <= {"workflow_dispatch", "workflow_call"}, f"{name}: {sorted(triggers)}"
